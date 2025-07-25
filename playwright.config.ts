@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: 'line',
   // We'll start the dev server manually before running tests
   webServer: {
-    command: 'npm run dev -- --host --port 5173',
+    command: 'node --experimental-global-webcrypto node_modules/vite/bin/vite.js --host --port 5173',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 120000, // 2 minutes
@@ -19,7 +19,8 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
+    trace: 'off',
+    screenshot: 'off',
     launchOptions: {
       args: [
         '--use-fake-ui-for-media-stream',
