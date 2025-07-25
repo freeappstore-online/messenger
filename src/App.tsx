@@ -31,7 +31,8 @@ export const App: React.FC = () => {
   });
 
   // Chat
-  const chat = useChat(FAMILY_ID, userId ?? '', crypto, send);
+  const displayName = auth.currentUser?.displayName ?? userId ?? 'Unknown';
+  const chat = useChat(FAMILY_ID, displayName, userId ?? '', crypto, send);
 
   const [copied, setCopied] = useState(false);
 
@@ -182,6 +183,12 @@ export const App: React.FC = () => {
             <small>{new Date(m.createdAt).toLocaleTimeString()}</small>
             <div
               style={{
+                fontSize: 12,
+                color: '#666'
+              }}
+            >{m.authorName}</div>
+            <div
+              style={{
                 display: 'inline-block',
                 padding: '4px 8px',
                 borderRadius: 4,
@@ -194,12 +201,12 @@ export const App: React.FC = () => {
         ))}
       </section>
 
-      <Composer onSend={chat.sendMessage} />
+      <Composer onSend={chat.sendMessage} disabled={Object.values(connections).every(s => s !== 'connected')} />
     </div>
   );
 };
 
-const Composer: React.FC<{ onSend: (t: string) => void }> = ({ onSend }) => {
+const Composer: React.FC<{ onSend: (t: string) => void; disabled?: boolean }> = ({ onSend, disabled = false }) => {
   const [text, setText] = useState('');
   return (
     <form
@@ -218,8 +225,9 @@ const Composer: React.FC<{ onSend: (t: string) => void }> = ({ onSend }) => {
         onChange={e => setText(e.target.value)}
         placeholder="Type a message"
         style={{ flex: 1 }}
+        disabled={disabled}
       />
-      <button data-testid="send-btn" type="submit">Send</button>
+      <button data-testid="send-btn" type="submit" disabled={disabled || !text.trim()}>Send</button>
     </form>
   );
 };

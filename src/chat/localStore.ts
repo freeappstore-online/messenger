@@ -1,6 +1,7 @@
 export interface PlainMessage {
   id: string;
   authorId: string;
+  authorName: string;
   convId: string;
   body: string;
   createdAt: number;

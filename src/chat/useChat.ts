@@ -21,7 +21,7 @@ export async function deserializeEnvelope(buf: ArrayBuffer, crypto: CryptoAdapte
 
 import { conversationId } from './localStore';
 
-export function useChat(me: string, peer: string | null, crypto: CryptoAdapter, sendBytes: (buf: ArrayBuffer)=>void) {
+export function useChat(me: string, meName: string, peer: string | null, crypto: CryptoAdapter, sendBytes: (buf: ArrayBuffer)=>void) {
       const convId = peer ? conversationId(me, peer) : 'scratch';
 
     const [messages, setMessages] = useState<PlainMessage[]>(() => loadMessages(convId));
@@ -35,6 +35,7 @@ export function useChat(me: string, peer: string | null, crypto: CryptoAdapter, 
     const msg: PlainMessage = {
       id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
             authorId: me,
+      authorName: meName,
       convId,
       body,
       createdAt: Date.now()
