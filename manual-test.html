@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual Test for useP2P</title>
+  <script type="module">
+    // This script will load after the page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('Page loaded, opening console to check for errors...');
+      
+      // Add a button to test the connection with null signaling
+      document.getElementById('testButton').addEventListener('click', async () => {
+        try {
+          console.log('Testing P2P connection with null signaling...');
+          // Navigate to the app with a special query parameter that could trigger the test condition
+          window.location.href = 'http://localhost:5173?test=null-signaling';
+        } catch (error) {
+          console.error('Error during test:', error);
+        }
+      });
+    });
+  </script>
+</head>
+<body>
+  <h1>Manual Test for useP2P Null Signaling Fix</h1>
+  <p>This page helps test if the null signaling reference fix is working properly.</p>
+  
+  <div style="margin: 20px 0;">
+    <button id="testButton" style="padding: 10px 20px; font-size: 16px;">
+      Test P2P with Null Signaling
+    </button>
+  </div>
+  
+  <div style="margin-top: 30px; border: 1px solid #ccc; padding: 15px; background-color: #f8f8f8;">
+    <h3>Instructions:</h3>
+    <ol>
+      <li>Open your browser's developer tools (F12 or right-click and select "Inspect")</li>
+      <li>Go to the Console tab</li>
+      <li>Click the "Test P2P with Null Signaling" button above</li>
+      <li>Watch the console for any errors related to signaling being null</li>
+      <li>If no errors appear related to "Cannot read property of null" for signaling, the fix is working!</li>
+    </ol>
+  </div>
+</body>
+</html>
