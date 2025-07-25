@@ -8,7 +8,7 @@ export async function login(page: Page, email: string, password: string): Promis
   
   try {
     // Take a screenshot before login
-    await page.screenshot({ path: `before-login-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/before-login-${Date.now()}.png` });
     
     // Wait for the login form to be visible
     await page.waitForSelector('input[type="email"]', { timeout: 10000 });
@@ -26,12 +26,12 @@ export async function login(page: Page, email: string, password: string): Promis
     console.log(`Successfully logged in as ${email}`);
     
     // Take a screenshot after successful login
-    await page.screenshot({ path: `after-login-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/after-login-${Date.now()}.png` });
   } catch (error) {
     console.error(`Login failed for ${email}:`, error);
     
     // Take a screenshot of the failed login state
-    await page.screenshot({ path: `login-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/login-failed-${Date.now()}.png` });
     
     // Log the current page content to help debug
     const content = await page.content();
@@ -72,7 +72,7 @@ export async function getUserId(page: Page): Promise<string> {
     console.error('Failed to get user ID:', error);
     
     // Take a screenshot to help debug
-    await page.screenshot({ path: `get-user-id-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/get-user-id-failed-${Date.now()}.png` });
     
     throw error;
   }

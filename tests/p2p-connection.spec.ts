@@ -92,8 +92,8 @@ test('Two users can connect via WebRTC and exchange messages', async ({ browser,
     await navigateToApp(userBPage, appUrl);
     
     // Take screenshots of initial state after successful navigation
-    await userAPage.screenshot({ path: `userA-initial-${Date.now()}.png` });
-    await userBPage.screenshot({ path: `userB-initial-${Date.now()}.png` });
+    await userAPage.screenshot({ path: `screenshots/userA-initial-${Date.now()}.png` });
+    await userBPage.screenshot({ path: `screenshots/userB-initial-${Date.now()}.png` });
     
     // Log in both users
     console.log('Logging in users...');
@@ -118,8 +118,8 @@ test('Two users can connect via WebRTC and exchange messages', async ({ browser,
     }
     
     // Take screenshots after login
-    await userAPage.screenshot({ path: `userA-after-login-${Date.now()}.png` });
-    await userBPage.screenshot({ path: `userB-after-login-${Date.now()}.png` });
+    await userAPage.screenshot({ path: `screenshots/userA-after-login-${Date.now()}.png` });
+    await userBPage.screenshot({ path: `screenshots/userB-after-login-${Date.now()}.png` });
     
     // Log the UI state before connection
     console.log('Checking UI state before connection...');
@@ -162,8 +162,8 @@ test('Two users can connect via WebRTC and exchange messages', async ({ browser,
     console.log('Connection established successfully on both sides!');
     
     // Take screenshots after connection
-    await userAPage.screenshot({ path: `userA-connected-${Date.now()}.png` });
-    await userBPage.screenshot({ path: `userB-connected-${Date.now()}.png` });
+    await userAPage.screenshot({ path: `screenshots/userA-connected-${Date.now()}.png` });
+    await userBPage.screenshot({ path: `screenshots/userB-connected-${Date.now()}.png` });
     
     // Wait a moment to ensure connection is stable
     await userAPage.waitForTimeout(2000);
@@ -187,14 +187,14 @@ test('Two users can connect via WebRTC and exchange messages', async ({ browser,
     await verifyMessageReceived(userAPage, responseMessage);
     
     // Take final screenshots
-    await userAPage.screenshot({ path: `userA-final-${Date.now()}.png` });
-    await userBPage.screenshot({ path: `userB-final-${Date.now()}.png` });
+    await userAPage.screenshot({ path: `screenshots/userA-final-${Date.now()}.png` });
+    await userBPage.screenshot({ path: `screenshots/userB-final-${Date.now()}.png` });
     
     console.log('Test passed: Two users successfully connected and exchanged messages');
   } catch (err) {
     console.error('Test failed:', err);
-    await userAPage.screenshot({ path: `error-userA-${Date.now()}.png` });
-    await userBPage.screenshot({ path: `error-userB-${Date.now()}.png` });
+    await userAPage.screenshot({ path: `screenshots/error-userA-${Date.now()}.png` });
+    await userBPage.screenshot({ path: `screenshots/error-userB-${Date.now()}.png` });
     throw err;
   } finally {
     await userAContext.close();
