@@ -1,7 +1,7 @@
 export interface PlainMessage {
   id: string;
   authorId: string;
-  familyId: string;
+  convId: string;
   body: string;
   createdAt: number;
 }
