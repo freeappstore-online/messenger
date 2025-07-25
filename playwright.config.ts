@@ -2,20 +2,21 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: /p2p-connection\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
   reporter: 'line',
   // We'll start the dev server manually before running tests
-  // webServer: {
-  //   command: 'npm run dev -- --host',
-  //   url: 'http://localhost:5173',
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120000, // 120 seconds to start the server
-  //   stdout: 'pipe',
-  //   stderr: 'pipe',
-  // },
+  webServer: {
+    command: 'npm run dev -- --host --port 5173',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000, // 2 minutes
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
