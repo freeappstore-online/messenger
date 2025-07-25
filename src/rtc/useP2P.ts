@@ -91,8 +91,12 @@ export function useP2P(
             peer.pc.signalingState
           );
 
+          // Skip if we already have a remote answer (duplicate message)
+          if (peer.pc.remoteDescription?.type === "answer") {
+            console.log("Duplicate answer received - already have remote answer");
+          }
           // Only set remote description if we're in the right state (have a local offer)
-          if (peer.pc.signalingState === "have-local-offer") {
+          else if (peer.pc.signalingState === "have-local-offer") {
             await peer.pc.setRemoteDescription(sig.sdp);
             flushPendingCandidates(peer);
             console.log(`Set remote description from ${sig.from}`);
