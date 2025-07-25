@@ -114,7 +114,7 @@ export async function navigateToApp(page: Page, url: string, maxRetries = 3): Pr
   console.log(`Navigating to ${url}...`);
   
   // Take a screenshot before navigation
-  await page.screenshot({ path: `before-navigation-${Date.now()}.png` });
+  await page.screenshot({ path: `screenshots/before-navigation-${Date.now()}.png` });
   
   while (!success && retryCount < maxRetries) {
     try {
@@ -131,7 +131,7 @@ export async function navigateToApp(page: Page, url: string, maxRetries = 3): Pr
       }
       
       // Take a screenshot after successful navigation
-      await page.screenshot({ path: `after-navigation-${Date.now()}.png` });
+      await page.screenshot({ path: `screenshots/after-navigation-${Date.now()}.png` });
       
       // Wait for the page to be fully interactive
       await page.waitForLoadState('domcontentloaded');
@@ -146,7 +146,7 @@ export async function navigateToApp(page: Page, url: string, maxRetries = 3): Pr
   
   if (!success) {
     // Take a screenshot of the failed state
-    await page.screenshot({ path: `navigation-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/navigation-failed-${Date.now()}.png` });
     throw new Error(`Failed to navigate to ${url} after ${maxRetries} attempts`);
   }
   

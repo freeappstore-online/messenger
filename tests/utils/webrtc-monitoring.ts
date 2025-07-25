@@ -113,7 +113,7 @@ export async function waitForConnectionEstablished(page: Page, maxWaitTimeMs = 1
     console.error('Connection establishment timed out or failed:', error);
     
     // Take a screenshot of the current page state
-    await page.screenshot({ path: `connection-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/connection-failed-${Date.now()}.png` });
     
     // Log the current page state
     const pageContent = await page.content();

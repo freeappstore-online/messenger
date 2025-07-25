@@ -21,12 +21,12 @@ export async function sendMessage(page: Page, message: string): Promise<void> {
     console.log('Message sent successfully');
     
     // Take a screenshot after sending the message
-    await page.screenshot({ path: `after-send-message-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/after-send-message-${Date.now()}.png` });
   } catch (error) {
     console.error('Failed to send message:', error);
     
     // Take a screenshot of the failed state
-    await page.screenshot({ path: `send-message-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/send-message-failed-${Date.now()}.png` });
     
     throw error;
   }
@@ -43,7 +43,7 @@ export async function verifyMessageReceived(page: Page, expectedMessage: string)
     const messageSelector = `text="${expectedMessage}"`;
     
     // Take a screenshot before waiting for the message
-    await page.screenshot({ path: `before-verify-message-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/before-verify-message-${Date.now()}.png` });
     
     // Wait for the message to appear with a timeout
     await page.waitForSelector(messageSelector, { timeout: 10000 });
@@ -51,12 +51,12 @@ export async function verifyMessageReceived(page: Page, expectedMessage: string)
     console.log('Message received successfully');
     
     // Take a screenshot after verifying the message
-    await page.screenshot({ path: `message-verified-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/message-verified-${Date.now()}.png` });
   } catch (error) {
     console.error(`Failed to verify message "${expectedMessage}":`, error);
     
     // Take a screenshot of the failed state
-    await page.screenshot({ path: `verify-message-failed-${Date.now()}.png` });
+    await page.screenshot({ path: `screenshots/verify-message-failed-${Date.now()}.png` });
     
     // Log the current chat messages to help debug
     const chatMessages = await page.$$eval('.message, .chat-message', elements => 
