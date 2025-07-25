@@ -26,12 +26,14 @@ export const App: React.FC = () => {
   const signaling = useMemo(() => (userId ? new SignalingService(fs, userId) : null), [userId]);
 
   // P2P
-  const { connectTo, send } = useP2P(userId ?? '', signaling!, {
+  const { connectTo, disconnectFrom, send, connections } = useP2P(userId ?? '', signaling!, {
     onMessage: (buf) => chat.onIncoming(buf)
   });
 
   // Chat
   const chat = useChat(FAMILY_ID, userId ?? '', crypto, send);
+
+  const [copied, setCopied] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -133,7 +135,20 @@ export const App: React.FC = () => {
     <div style={{ maxWidth: 480, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
       <h1>Family Chat POC</h1>
       <section style={{ marginBottom: 16 }}>
-        <p>Signed in as: {userId}</p>
+        <p>
+            Signed in as: {userId}{' '}
+            <button
+              title="Copy UID"
+              aria-label="Copy UID"
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+              onClick={() => {
+                navigator.clipboard.writeText(userId ?? '');
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >📋</button>
+            {copied && <span style={{ marginLeft: 4, fontSize: 12 }}>Copied!</span>}
+          </p>
         <input
           data-testid="peer-id-input"
           value={peerId}
@@ -142,6 +157,23 @@ export const App: React.FC = () => {
           style={{ width: '100%', marginBottom: 8 }}
         />
         <button data-testid="connect-btn" onClick={() => connectTo(peerId)}>Connect To Peer</button>
+
+      {/* Connection status list */}
+      {Object.keys(connections).length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h3>Connections</h3>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {Object.entries(connections).map(([pid, state]) => (
+              <li key={pid} style={{ marginBottom: 4 }}>
+                <span style={{ marginRight: 8 }}>{pid.slice(0, 6)}… – {state}</span>
+                {state === 'connected' && (
+                  <button onClick={() => disconnectFrom(pid)}>Disconnect</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       </section>
 
       <section data-testid="message-list" style={{ border: '1px solid #ccc', padding: 8, height: 300, overflowY: 'auto', marginBottom: 8 }}>

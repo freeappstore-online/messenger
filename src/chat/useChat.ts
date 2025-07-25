@@ -19,19 +19,23 @@ export async function deserializeEnvelope(buf: ArrayBuffer, crypto: CryptoAdapte
   return JSON.parse(new TextDecoder().decode(plain)) as PlainMessage;
 }
 
-export function useChat(familyId: string, me: string, crypto: CryptoAdapter, sendBytes: (buf: ArrayBuffer)=>void) {
-  const [messages, setMessages] = useState<PlainMessage[]>(() => loadMessages(familyId));
+import { conversationId } from './localStore';
+
+export function useChat(me: string, peer: string | null, crypto: CryptoAdapter, sendBytes: (buf: ArrayBuffer)=>void) {
+      const convId = peer ? conversationId(me, peer) : 'scratch';
+
+    const [messages, setMessages] = useState<PlainMessage[]>(() => loadMessages(convId));
 
   const persist = useCallback((next: PlainMessage[]) => {
     setMessages(next);
-    saveMessages(familyId, next);
-  }, [familyId]);
+    saveMessages(convId, next);
+  }, [convId]);
 
   const sendMessage = useCallback(async (body: string) => {
     const msg: PlainMessage = {
       id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
-      authorId: me,
-      familyId,
+            authorId: me,
+      convId,
       body,
       createdAt: Date.now()
     };
@@ -42,7 +46,7 @@ export function useChat(familyId: string, me: string, crypto: CryptoAdapter, sen
     const bytes = new TextEncoder().encode(JSON.stringify(msg));
     const env: Envelope = { v: 1, enc: 'none', payload: await crypto.encrypt(bytes) };
     sendBytes(serializeEnvelope(env));
-  }, [messages, me, familyId, crypto, persist, sendBytes]);
+  }, [messages, me, convId, crypto, persist, sendBytes]);
 
   const onIncoming = useCallback(async (buf: ArrayBuffer) => {
     const msg = await deserializeEnvelope(buf, crypto);

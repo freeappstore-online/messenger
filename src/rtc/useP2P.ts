@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SignalingService } from "../services/signalingService";
 
 export interface P2POptions {
@@ -7,7 +7,9 @@ export interface P2POptions {
 
 export interface P2PAPI {
   connectTo: (peerId: string) => Promise<void>;
+  disconnectFrom: (peerId: string) => void;
   send: (bytes: ArrayBuffer) => void;
+  connections: Record<string, RTCPeerConnectionState>;
 }
 
 export function useP2P(
@@ -24,16 +26,21 @@ export function useP2P(
   }
 
   const peersRef = useRef<Map<string, PeerInfo>>(new Map());
+  const [connections, setConnections] = useState<
+    Record<string, RTCPeerConnectionState>
+  >({});
 
   // Helper to flush any queued ICE candidates once remote description is set
   function flushPendingCandidates(peer: PeerInfo) {
     if (peer.pendingCandidates && peer.pendingCandidates.length) {
-      console.log(`Flushing ${peer.pendingCandidates.length} queued ICE candidates`);
+      console.log(
+        `Flushing ${peer.pendingCandidates.length} queued ICE candidates`
+      );
       peer.pendingCandidates.forEach(async (c) => {
         try {
           await peer.pc.addIceCandidate(c);
         } catch (err) {
-          console.warn('Failed to add queued ICE candidate:', err);
+          console.warn("Failed to add queued ICE candidate:", err);
         }
       });
       peer.pendingCandidates = [];
@@ -55,9 +62,12 @@ export function useP2P(
 
         // Handle offer - glare-safe answer logic
         if (sig.type === "offer" && sig.sdp) {
-          console.log(`Received offer from ${sig.from}, state: ${peer.pc.signalingState}`);
+          console.log(
+            `Received offer from ${sig.from}, state: ${peer.pc.signalingState}`
+          );
 
-          const offerCollision = peer.makingOffer || peer.pc.signalingState !== "stable";
+          const offerCollision =
+            peer.makingOffer || peer.pc.signalingState !== "stable";
           if (offerCollision) {
             if (!peer.polite) {
               console.warn("Ignoring offer due to collision (impolite)");
@@ -126,19 +136,40 @@ export function useP2P(
   }, [signaling]);
 
   function createPeer(peerId: string) {
+    setConnections((conn) => ({
+      ...conn,
+      [peerId]: "new" as RTCPeerConnectionState,
+    }));
     console.log(`Creating new peer connection for ${peerId}`);
     // Deterministic polite flag to resolve glare (lexicographic order)
     const polite = _myId > peerId;
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+      ],
       iceCandidatePoolSize: 10,
     });
 
     // Log connection state changes
     pc.onconnectionstatechange = () => {
+      setConnections((conn) => ({ ...conn, [peerId]: pc.connectionState }));
       console.log(
         `Connection state for ${peerId} changed to: ${pc.connectionState}`
       );
+      if (
+        pc.connectionState === "closed" ||
+        pc.connectionState === "failed" ||
+        pc.connectionState === "disconnected"
+      ) {
+        setConnections((conn) => {
+          const { [peerId]: _removed, ...rest } = conn;
+          return rest;
+        });
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -193,19 +224,9 @@ export function useP2P(
 
     // we create channel when we are initiator; for incoming, ondatachannel fires
 
-    pc.onnegotiationneeded = async () => {
-      const peer = peersRef.current.get(peerId);
-      if (!peer || peer.makingOffer) return;
-      try {
-        peer.makingOffer = true;
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await signaling?.send(peerId, { type: "offer", sdp: offer });
-      } catch (err) {
-        console.error("Negotiationneeded error:", err);
-      } finally {
-        peer.makingOffer = false;
-      }
+    // Disable automatic renegotiation; connectTo() drives offers explicitly.
+    pc.onnegotiationneeded = () => {
+      console.log('onnegotiationneeded ignored – manual negotiation handled in connectTo');
     };
 
     return { pc, pendingCandidates: [], makingOffer: false, polite };
@@ -313,6 +334,17 @@ export function useP2P(
     }
   }
 
+  function disconnectFrom(peerId: string) {
+    const peer = peersRef.current.get(peerId);
+    if (!peer) return;
+    peer.pc.close();
+    peersRef.current.delete(peerId);
+    setConnections((conn) => {
+      const { [peerId]: _removed, ...rest } = conn;
+      return rest;
+    });
+  }
+
   function send(bytes: ArrayBuffer) {
     // Early return if signaling is null
     if (!signaling) return;
@@ -323,5 +355,5 @@ export function useP2P(
     });
   }
 
-  return { connectTo, send };
+  return { connectTo, disconnectFrom, send, connections };
 }

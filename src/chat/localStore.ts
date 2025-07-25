@@ -8,14 +8,18 @@ export interface PlainMessage {
 
 const KEY_PREFIX = 'familychat_msgs_';
 
-export function loadMessages(familyId: string): PlainMessage[] {
-  const raw = localStorage.getItem(KEY_PREFIX + familyId);
+export function conversationId(a: string, b: string) {
+  return [a, b].sort().join(':');
+}
+
+export function loadMessages(convId: string): PlainMessage[] {
+  const raw = localStorage.getItem(KEY_PREFIX + convId);
   if (!raw) return [];
   try {
     return JSON.parse(raw) as PlainMessage[];
   } catch { return []; }
 }
 
-export function saveMessages(familyId: string, msgs: PlainMessage[]) {
-  localStorage.setItem(KEY_PREFIX + familyId, JSON.stringify(msgs));
+export function saveMessages(convId: string, msgs: PlainMessage[]) {
+  localStorage.setItem(KEY_PREFIX + convId, JSON.stringify(msgs));
 }
