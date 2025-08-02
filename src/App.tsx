@@ -61,6 +61,18 @@ export const App: React.FC = () => {
     return IS_PRODUCTION ? REFRESH_INTERVAL_PROD : REFRESH_INTERVAL_DEV;
   }, []);
 
+  // Check URL for test mode parameters
+  const isTestMode = useMemo(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.has('testMode');
+  }, []);
+
+  // Check if auto-connection is disabled via URL param
+  const autoConnectionDisabled = useMemo(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.has('disableAutoConnect');
+  }, []);
+  
   // Load family members with caching
   const loadFamilyMembers = useCallback(async (force = false) => {
     if (!userId) return;
@@ -205,6 +217,12 @@ export const App: React.FC = () => {
     const autoConnectToFamily = async () => {
       if (!userId || !familyInitialized || !signaling) {
         console.log('[App] Not auto-connecting - missing userId, initialization, or signaling');
+        return;
+      }
+      
+      // Skip auto-connection if disabled via URL parameter (for testing purposes)
+      if (autoConnectionDisabled) {
+        console.log('[App] Auto-connection disabled via URL parameter');
         return;
       }
       

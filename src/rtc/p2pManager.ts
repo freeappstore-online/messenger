@@ -42,6 +42,8 @@ interface PresenceMessage {
 
 interface PeerInfo {
   id: string; // The ID of the peer
+  connectionId: string; // Unique ID for this specific connection
+  connectionType: 'auto' | 'manual'; // Whether this was auto-connected or manually connected
   pc: RTCPeerConnection;
   ch?: RTCDataChannel;
   pendingCandidates?: RTCIceCandidateInit[];
@@ -74,8 +76,11 @@ export class P2PManager {
   /** Options for the P2PManager instance */
   readonly opts: P2PManagerOptions;
   
-  /** Maps peer IDs to their connection info */
-  private peers: Map<string, PeerInfo> = new Map();
+  /** Maps connection IDs to their connection info */
+  private connections: Map<string, PeerInfo> = new Map();
+  
+  /** Maps peer IDs to an array of their connection IDs */
+  private peerConnections: Map<string, string[]> = new Map();
 
   /**
    * Creates a new P2PManager
@@ -91,11 +96,47 @@ export class P2PManager {
     // start listening to signalling events immediately
     this.signaling.listen(async (docId, sig) => {
       const fromId = this.sanitize(sig.from);
-      let peer = this.peers.get(fromId);
-      if (!peer) {
-        peer = this.createPeer(fromId);
-        this.peers.set(fromId, peer);
+      
+      // For answer/ice signals, we need to find the correct connectionId
+      if ((sig.type === 'answer' || sig.type === 'ice') && sig.connectionId) {
+        // Use the connectionId in the signal to find the correct peer
+        const targetConnectionId = sig.connectionId;
+        const peer = this.connections.get(targetConnectionId);
+        
+        if (peer) {
+          // We found the correct peer for this answer/ice candidate
+          console.log(`[P2PManager] Routing ${sig.type} to existing connection ${targetConnectionId}`);
+          await this.handleSignal(peer, fromId, docId, sig);
+          return;
+        } else {
+          console.log(`[P2PManager] Received ${sig.type} for unknown connection ${targetConnectionId}`);
+          // If we can't find the exact connection, we can't apply this signal
+          return;
+        }
       }
+      
+      // For offers or signals without connectionId, create or find a connection
+      const connectionId = sig.connectionId || this.generateConnectionId(fromId);
+      
+      let peer = this.connections.get(connectionId);
+      if (!peer) {
+        // Only create a new peer for offers or if we need to
+        if (sig.type === 'offer' || !sig.connectionId) {
+          console.log(`[P2PManager] Creating new connection ${connectionId} for ${sig.type}`);
+          peer = this.createPeer(fromId, connectionId, 'auto');
+          this.connections.set(connectionId, peer);
+          
+          // Track this connection under the peer ID
+          if (!this.peerConnections.has(fromId)) {
+            this.peerConnections.set(fromId, []);
+          }
+          this.peerConnections.get(fromId)?.push(connectionId);
+        } else {
+          console.log(`[P2PManager] Ignoring ${sig.type} for unknown connection ${connectionId}`);
+          return;
+        }
+      }
+      
       await this.handleSignal(peer, fromId, docId, sig);
     });
   }
@@ -110,23 +151,40 @@ export class P2PManager {
    * @param peerId - The ID of the peer to connect to
    * @returns A promise that resolves when the connection setup process begins
    */
-  async connectTo(peerId: string): Promise<void> {
+  async connectTo(peerId: string, connectionType: 'auto' | 'manual' = 'auto'): Promise<string> {
     const targetId = this.sanitize(peerId);
-
-    let peer = this.peers.get(targetId);
-    if (!peer) {
-      peer = this.createPeer(targetId);
-      this.peers.set(targetId, peer);
+    
+    // Generate a new unique connection ID for this connection
+    const connectionId = this.generateConnectionId(targetId, connectionType);
+    
+    // Create a new peer connection with this connectionId
+    let peer = this.createPeer(targetId, connectionId, connectionType);
+    
+    // Store in our connections map
+    this.connections.set(connectionId, peer);
+    
+    // Also track under the peer ID
+    if (!this.peerConnections.has(targetId)) {
+      this.peerConnections.set(targetId, []);
     }
-
+    const connections = this.peerConnections.get(targetId);
+    if (connections) {
+      connections.push(connectionId);
+    }
+    
     // if already connected we are done
-    if (peer.pc.connectionState === "connected") return;
+    if (peer.pc.connectionState === "connected") {
+      return connectionId;
+    }
 
     // ensure stable before creating a new offer
     if (peer.pc.signalingState !== "stable") {
+      console.log(`[P2PManager] Signaling state not stable for ${connectionId}, recreating peer`);
       peer.pc.close();
-      peer = this.createPeer(targetId);
-      this.peers.set(targetId, peer);
+      // Create a new peer with same connectionId, replacing the old one
+      const newPeer = this.createPeer(targetId, connectionId, connectionType);
+      this.connections.set(connectionId, newPeer);
+      peer = newPeer;
     }
 
     // create data channel if needed
@@ -143,56 +201,144 @@ export class P2PManager {
     const offer = await peer.pc.createOffer();
     await peer.pc.setLocalDescription(offer);
     peer.makingOffer = false;
-    await this.signaling.send(targetId, { type: "offer", sdp: offer });
+    
+    // Include connectionId in the signal to ensure responses target the right connection
+    await this.signaling.send(targetId, { 
+      type: "offer", 
+      sdp: offer, 
+      connectionId: connectionId 
+    });
+    
+    return connectionId;
   }
 
   /**
-   * Disconnects from a peer
+   * Disconnects from a peer or a specific connection
    *
-   * This will close the RTCPeerConnection and remove the peer from the internal map.
+   * This will close the RTCPeerConnection(s) and remove the connection(s) from the internal maps.
    *
    * @param peerId - The ID of the peer to disconnect from
+   * @param connectionId - Optional specific connection ID to disconnect (if not provided, all connections to this peer will be disconnected)
    */
-  disconnectFrom(peerId: string) {
-    const p = this.peers.get(peerId);
-    if (!p) return;
-    p.pc.close();
-    this.peers.delete(peerId);
+  disconnectFrom(peerId: string, connectionId?: string): void {
+    const targetId = this.sanitize(peerId);
+    
+    // If connectionId is provided, only disconnect that specific connection
+    if (connectionId) {
+      const peer = this.connections.get(connectionId);
+      if (peer && peer.id === targetId) {
+        console.log(`[P2PManager] Disconnecting specific connection ${connectionId} to peer ${targetId}`);
+        // Close the connection
+        peer.pc.close();
+        
+        // Remove from connections map
+        this.connections.delete(connectionId);
+        
+        // Remove from peerConnections array
+        const connections = this.peerConnections.get(targetId);
+        if (connections) {
+          const index = connections.indexOf(connectionId);
+          if (index >= 0) {
+            connections.splice(index, 1);
+          }
+          
+          // If this was the last connection to this peer, clean up the empty array
+          if (connections.length === 0) {
+            this.peerConnections.delete(targetId);
+          }
+        }
+      }
+      return;
+    }
+    
+    // If no connectionId provided, disconnect all connections to this peer
+    const connections = this.peerConnections.get(targetId);
+    if (connections) {
+      console.log(`[P2PManager] Disconnecting all ${connections.length} connections to peer ${targetId}`);
+      
+      // Close and remove each connection
+      for (const connId of connections) {
+        const peer = this.connections.get(connId);
+        if (peer) {
+          peer.pc.close();
+          this.connections.delete(connId);
+        }
+      }
+      
+      // Remove the peer entirely
+      this.peerConnections.delete(targetId);
+    }
   }
 
   /**
    * Sends binary data to a specific peer
    *
    * This will send the data via the established data channel.
+   * If connectionId is provided, it will send to that specific connection.
+   * If not, it will try to find an open connection to the peer.
    *
    * @param peerId - The ID of the peer to send to
    * @param bytes - The binary data to send
+   * @param connectionId - Optional specific connection ID to use
    * @returns Whether the data was sent successfully
    */
-  sendTo(peerId: string, bytes: ArrayBuffer): boolean {
-    const p = this.peers.get(peerId);
-    if (!p?.ch || p.ch.readyState !== "open") return false;
-    try {
-      p.ch.send(bytes);
-      return true;
-    } catch {
-      return false;
+  sendTo(peerId: string, bytes: ArrayBuffer, connectionId?: string): boolean {
+    const targetId = this.sanitize(peerId);
+    
+    // If connectionId is provided, use that specific connection
+    if (connectionId) {
+      const peer = this.connections.get(connectionId);
+      if (!peer || peer.id !== targetId || !peer.ch || peer.ch.readyState !== "open") {
+        return false;
+      }
+      try {
+        peer.ch.send(bytes);
+        return true;
+      } catch {
+        return false;
+      }
     }
+    
+    // If no connectionId provided, try to find any open connection to this peer
+    const connections = this.peerConnections.get(targetId);
+    if (!connections || connections.length === 0) return false;
+    
+    // Try each connection until we find one that works
+    for (const connId of connections) {
+      const peer = this.connections.get(connId);
+      if (peer?.ch && peer.ch.readyState === "open") {
+        try {
+          peer.ch.send(bytes);
+          return true;
+        } catch {
+          // Continue to next connection if this one fails
+        }
+      }
+    }
+    
+    return false;
   }
 
   /**
    * Broadcasts binary data to all connected peers
-   *
+   * For each peer, it will try to send to exactly one connection
+   * 
    * @param bytes - The binary data to broadcast
    * @returns The number of peers that successfully received the data
    */
   broadcast(bytes: ArrayBuffer): number {
     let sentCount = 0;
-    this.peers.forEach((_p, pid) => {
-      if (this.sendTo(pid, bytes)) {
+    
+    // Get all unique peer IDs from the peerConnections map
+    const uniquePeers = Array.from(this.peerConnections.keys());
+    
+    // Try to send to each peer (each peer counts only once even if we have multiple connections)
+    for (const peerId of uniquePeers) {
+      if (this.sendTo(peerId, bytes)) {
         sentCount++;
       }
-    });
+    }
+    
     return sentCount;
   }
 
@@ -226,15 +372,32 @@ export class P2PManager {
     const encoder = new TextEncoder();
     const bytes = encoder.encode(jsonStr).buffer;
 
-    // Send to all connected peers
-    for (const peer of this.peers.values()) {
-      if (!peer.ch || peer.ch.readyState !== "open") continue;
-
-      try {
-        peer.ch.send(bytes);
-        sentCount++;
-      } catch (e) {
-        console.error(`[P2PManager] Failed to send presence to ${peer.id}:`, e);
+    // Send to all connected peers (one connection per peer)
+    const uniquePeers = Array.from(this.peerConnections.keys());
+    
+    for (const peerId of uniquePeers) {
+      const connections = this.peerConnections.get(peerId);
+      if (!connections || connections.length === 0) continue;
+      
+      // Find any open connection to send through
+      let sent = false;
+      for (const connId of connections) {
+        const peer = this.connections.get(connId);
+        if (peer?.ch && peer.ch.readyState === "open") {
+          try {
+            peer.ch.send(bytes);
+            sentCount++;
+            sent = true;
+            break; // Only need to send once per peer
+          } catch (e) {
+            console.error(`[P2PManager] Failed to send presence to ${peer.id} (${connId}):`, e);
+            // Continue to next connection if this one fails
+          }
+        }
+      }
+      
+      if (!sent) {
+        console.log(`[P2PManager] No open connection to send presence to peer ${peerId}`);
       }
     }
 
@@ -253,6 +416,18 @@ export class P2PManager {
   }
 
   /**
+   * Generates a unique connection ID for a peer connection
+   *
+   * @param peerId - The ID of the peer to connect to
+   * @param type - Optional connection type (auto or manual)
+   * @returns A unique connection ID
+   */
+  private generateConnectionId(peerId: string, type: 'auto' | 'manual' = 'auto'): string {
+    const randomPart = Math.random().toString(36).substring(2, 10);
+    return `${this.sanitize(peerId)}-${type}-${randomPart}-${Date.now()}`;
+  }
+
+  /**
    * Creates a new peer connection and sets up event handlers
    *
    * This initializes a new RTCPeerConnection with the appropriate configuration
@@ -260,10 +435,15 @@ export class P2PManager {
    * by lexicographic comparison of peer IDs.
    *
    * @param peerId - The ID of the peer to create
+   * @param connectionId - Unique ID for this specific connection (optional, will be generated if not provided)
+   * @param connectionType - Whether this was auto-connected or manually connected
    * @returns The peer information object
    */
-  private createPeer(peerId: string): PeerInfo {
-    console.log(`[P2PManager] Creating peer ${peerId}`);
+  private createPeer(peerId: string, connectionId?: string, connectionType: 'auto' | 'manual' = 'auto'): PeerInfo {
+    // Generate a connection ID if one wasn't provided
+    const actualConnectionId = connectionId || this.generateConnectionId(peerId, connectionType);
+    
+    console.log(`[P2PManager] Creating peer ${peerId} with connection ID ${actualConnectionId} (${connectionType})`);
     const isPolite = this.myId > peerId;
     console.log(`[P2PManager] I am ${isPolite ? "polite" : "impolite"} peer`);
 
@@ -276,6 +456,8 @@ export class P2PManager {
     const pc = new RTCPeerConnection(config);
     const peer: PeerInfo = {
       id: peerId,
+      connectionId: actualConnectionId,
+      connectionType: connectionType,
       pc,
       polite: isPolite,
       makingOffer: false,
@@ -320,9 +502,11 @@ export class P2PManager {
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
+        // Include the connectionId in the signal so the recipient knows which connection to apply it to
         this.signaling.send(id, {
           type: "ice",
           candidate: e.candidate.toJSON(),
+          connectionId: peer.connectionId
         });
       }
     };
@@ -405,52 +589,102 @@ export class P2PManager {
       }`
     );
 
-    const peer = this.peers.get(peerId);
-    if (peer) {
-      // Update the peer's online status
-      peer.isOnline = message.isOnline;
+    // Get all connections for this peer
+    const connections = this.peerConnections.get(peerId);
+    if (connections && connections.length > 0) {
+      // Update all connections for this peer to have the same online status
+      for (const connId of connections) {
+        const peer = this.connections.get(connId);
+        if (peer) {
+          peer.isOnline = message.isOnline;
+        }
+      }
 
-      // Notify callback if provided
+      // Notify callback if provided - we only notify once per peer ID regardless of how many connections
       this.opts.onPresenceUpdate?.(peerId, message.isOnline);
     }
   }
 
   /**
    * Sends a presence update to a specific peer
+   * Will try to send through any open connection to the peer
    *
    * @param peerId - The ID of the peer to send to
    * @param isOnline - Whether this peer is online
+   * @param connectionId - Optional specific connection ID to use
    * @returns Whether the message was sent successfully
    */
-  sendPresenceTo(peerId: string, isOnline: boolean): boolean {
-    const peer = this.peers.get(peerId);
-    if (!peer || !peer.ch || peer.ch.readyState !== "open") return false;
+  sendPresenceTo(peerId: string, isOnline: boolean, connectionId?: string): boolean {
+    const targetId = this.sanitize(peerId);
+    
+    // If connectionId is provided, use that specific connection
+    if (connectionId) {
+      const peer = this.connections.get(connectionId);
+      if (!peer || peer.id !== targetId || !peer.ch || peer.ch.readyState !== "open") {
+        return false;
+      }
+      
+      // Create presence message for this specific connection
+      const presenceMessage: PresenceMessage = {
+        userId: this.myId,
+        isOnline,
+        timestamp: Date.now(),
+      };
 
-    // Create presence message
+      // Wrap in P2P message format
+      const message: P2PMessage = {
+        type: MESSAGE_TYPE.PRESENCE,
+        payload: presenceMessage,
+      };
+
+      // Convert to JSON and then to binary
+      try {
+        const jsonStr = JSON.stringify(message);
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(jsonStr).buffer;
+        peer.ch.send(bytes);
+        return true;
+      } catch (e) {
+        console.error(`[P2PManager] Failed to send presence to ${peerId} (${connectionId}):`, e);
+        return false;
+      }
+    }
+    
+    // If no connectionId provided, try to find any open connection to this peer
+    const connections = this.peerConnections.get(targetId);
+    if (!connections || connections.length === 0) return false;
+    
+    // Prepare message once outside the loop
     const presenceMessage: PresenceMessage = {
       userId: this.myId,
       isOnline,
       timestamp: Date.now(),
     };
 
-    // Wrap in P2P message format
     const message: P2PMessage = {
       type: MESSAGE_TYPE.PRESENCE,
       payload: presenceMessage,
     };
 
-    // Convert to JSON and then to binary
-    try {
-      const jsonStr = JSON.stringify(message);
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(jsonStr).buffer;
-
-      peer.ch.send(bytes);
-      return true;
-    } catch (e) {
-      console.error(`[P2PManager] Failed to send presence to ${peerId}:`, e);
-      return false;
+    const jsonStr = JSON.stringify(message);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(jsonStr).buffer;
+    
+    // Try each connection until we find one that works
+    for (const connId of connections) {
+      const peer = this.connections.get(connId);
+      if (peer?.ch && peer.ch.readyState === "open") {
+        try {
+          peer.ch.send(bytes);
+          return true;
+        } catch (e) {
+          console.error(`[P2PManager] Failed to send presence to ${peerId} (${connId}):`, e);
+          // Continue to next connection if this one fails
+        }
+      }
     }
+    
+    return false;
   }
 
   /**
@@ -462,18 +696,35 @@ export class P2PManager {
    * @param peer - The peer information object to disconnect
    */
   private handleDisconnect(peer: PeerInfo) {
-    const { id, pc } = peer;
+    const { id, connectionId, pc } = peer;
 
     // Close and cleanup resources
     if (peer.ch) {
       peer.ch.close();
     }
     pc.close();
-    this.peers.delete(id);
-
-    // Notify listener if provided
-    if (this.opts?.onDisconnected) {
-      this.opts.onDisconnected(id);
+    
+    // Remove from our connection maps
+    this.connections.delete(connectionId);
+    
+    // Update the peerConnections map
+    const peerConnections = this.peerConnections.get(id);
+    if (peerConnections) {
+      // Remove this connectionId from the array
+      const updatedConnections = peerConnections.filter(cid => cid !== connectionId);
+      
+      if (updatedConnections.length > 0) {
+        // If there are still other connections to this peer, update the array
+        this.peerConnections.set(id, updatedConnections);
+      } else {
+        // If this was the last connection to this peer, remove the entry
+        this.peerConnections.delete(id);
+        
+        // Notify listener if provided - we only notify when the last connection is closed
+        if (this.opts?.onDisconnected) {
+          this.opts.onDisconnected(id);
+        }
+      }
     }
   }
 

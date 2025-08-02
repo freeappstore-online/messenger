@@ -2,10 +2,10 @@ import type { FirestoreService } from './firestoreService';
 import type { ISignalingService } from './signalingInterface';
 
 export type SignalPayload =
-  | { type: 'offer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'answer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'ice'; candidate: RTCIceCandidateInit }
-  | { type: 'simple-peer'; data: any }; // Simple-Peer signaling data
+  | { type: 'offer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
+  | { type: 'answer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
+  | { type: 'ice'; candidate: RTCIceCandidateInit; connectionId?: string }
+  | { type: 'simple-peer'; data: any; connectionId?: string }; // Simple-Peer signaling data
 
 export interface StoredSignal {
   type: 'offer' | 'answer' | 'ice' | 'simple-peer';
@@ -14,6 +14,7 @@ export interface StoredSignal {
   data?: any; // Simple-Peer signaling data
   from: string;
   createdAt: number;
+  connectionId?: string; // Unique ID to distinguish parallel connections between the same peers
 }
 
 export class SignalingService implements ISignalingService {

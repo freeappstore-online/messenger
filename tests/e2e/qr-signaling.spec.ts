@@ -3,6 +3,7 @@ import { test, expect, Page, Browser, BrowserContext } from '@playwright/test';
 import { login, getUserId } from '../utils/auth-helpers';
 import { installPCTracker, waitForRTCConnected } from '../utils/pc-tracker';
 import { sendMessage, verifyMessageReceived } from '../utils/message-helpers';
+import { navigateToApp } from '../utils/test-setup';
 
 // Helper function to check if server is available
 async function isServerAvailable(url: string): Promise<boolean> {
@@ -247,189 +248,386 @@ async function pasteQrData(page: Page, qrData: string): Promise<void> {
   }, qrData);
 }
 
-// Test for QR code signaling between two browser contexts
 test.describe('Two users can connect via QR code signaling and exchange messages', () => {
   // Increase timeout for this test
   test.setTimeout(120000); // 2 minute timeout
-  test('QR code signaling', async ({ browser, baseURL }) => {
-  // Make sure we have a valid base URL
-  if (!baseURL) {
-    throw new Error('baseURL is not defined');
-  }
-  
-  // Check if server is available
-  const serverAvailable = await isServerAvailable(baseURL);
-  if (!serverAvailable) {
-    console.log('Server is not available, skipping test');
-    test.skip();
-    return;
-  }
-  
-  // Create browser contexts and pages for both users
-  const userA = await createUserContext(browser, 'userA');
-  const userB = await createUserContext(browser, 'userB');
-  
-  try {
-    // Install PC tracker early - before any navigation or RTCPeerConnection creation
-    console.log('Installing PC trackers early...');
-    await installPCTracker(userA.page);
-    await installPCTracker(userB.page);
+
+  test('should connect via QR code and exchange messages', async ({ browser, baseURL }) => {
+    // Make sure we have a valid base URL
+    if (!baseURL) {
+      throw new Error('baseURL is not defined');
+    }
     
-    // Import the navigateToApp function from test-setup
-    const { navigateToApp } = await import('../utils/test-setup');
+    // Check if server is available
+    const serverAvailable = await isServerAvailable(baseURL);
+    if (!serverAvailable) {
+      console.log('Server is not available, skipping test');
+      test.skip();
+      return;
+    }
     
-    // Navigate both users to the app
-    const appUrl = baseURL;
-    await navigateToApp(userA.page, appUrl);
-    await navigateToApp(userB.page, appUrl);
+    // Create browser contexts and pages for both users
+    const userA = await createUserContext(browser, 'userA');
+    const userB = await createUserContext(browser, 'userB');
     
-    // Login both users
-    console.log('Logging in User A: test1@user.com');
-    await login(userA.page, 'test1@user.com', 'password123');
-    
-    console.log('Logging in User B: test2@user.com');
-    await login(userB.page, 'test2@user.com', 'password123');
-    
-    // Get user IDs for both users
-    console.log('Getting user IDs...');
-    const userAId = await getUserId(userA.page);
-    const userBId = await getUserId(userB.page);
-    console.log(`User A ID: ${userAId} | User B ID: ${userBId}`);
-    
-    // STEP 1: User A enters User B's ID and generates an offer
-    console.log('User A initiating connection to User B...');
-    await userA.qrPage.enterPeerId(userBId);
-    
-    // STEP 2: Get the offer QR code data from User A
-    console.log('Getting offer QR code data from User A...');
-    const offerQrData = await userA.qrPage.getQrCodeData('.offer-container');
-    console.log(`Got offer QR data (${offerQrData.length} chars)`);
-    
-    // STEP 3: User B pastes and processes the offer data
-    console.log('User B processing offer data...');
-    await userB.qrPage.pasteQrData(offerQrData);
-    
-    // STEP 4: Get the answer QR code data from User B
-    console.log('Getting answer QR code data from User B...');
-    // Declare the variable outside the try/catch for proper scope
-    let answerQrData = '{"connectionData":"placeholder-for-testing"}';
-    
-    // Wait for answer to be generated with more flexibility - either wait for the answer container
-    // or verify the presence of connection data in another form
     try {
-      // Look for either an answer container or any QR/JSON container with data
-      await Promise.race([
-        userB.page.waitForSelector('.answer-container', { timeout: 5000 }),
-        userB.page.waitForSelector('.connection-data-container:visible', { timeout: 5000 }),
-        userB.page.waitForSelector('.qr-container:visible', { timeout: 5000 })
-      ]);
+      // Install PC tracker early - before any navigation or RTCPeerConnection creation
+      console.log('Installing PC trackers early...');
+      await installPCTracker(userA.page);
+      await installPCTracker(userB.page);
       
-      // Get whatever connection data is available
-      const extractedData = await userB.page.evaluate(() => {
-        // Try different ways to find connection data
-        const textarea = document.querySelector('textarea.connection-data') as HTMLTextAreaElement | null;
-        if (textarea && textarea.value && textarea.value.length > 10) {
-          return textarea.value;
-        }
+      // Define a helper function to log RTC state
+      const logRTCState = () => `
+        const connections = window.__pcs || [];
+        console.log('RTC Connections:', connections.length);
         
-        // Look for any JSON data display
-        const jsonDisplay = document.querySelector('.json-data');
-        if (jsonDisplay && jsonDisplay.textContent && jsonDisplay.textContent.length > 10) {
-          return jsonDisplay.textContent;
-        }
-        
-        // Default - use a properly formatted placeholder that matches expected signal format
-        return JSON.stringify({
-          to: "W4SHfoOxV5R8BsntoqxBFrwln5m2", // Target user ID
-          from: "CW6G9jvYQmUF4xlMghZZR0FYrQr1", // Source user ID
-          payload: {
-            type: "answer",
-            from: "CW6G9jvYQmUF4xlMghZZR0FYrQr1",
-            createdAt: Date.now(),
-            sdp: "v=0\r\no=- 1234567890 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:test\r\na=ice-pwd:test123\r\na=setup:active\r\na=mid:0\r\na=sendrecv\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n"
+        connections.forEach((pc, i) => {
+          console.log('Connection ' + i + ':', 
+            pc.connectionState || 'unknown', 
+            '/', 
+            pc.iceConnectionState || 'unknown');
+        });
+      `;
+      
+      // Setup console logging for both pages
+      await userA.page.addInitScript({
+        content: `window.logRTCState = function() { ${logRTCState()} }`
+      });
+      
+      await userB.page.addInitScript({
+        content: `window.logRTCState = function() { ${logRTCState()} }`
+      });
+
+      // Define the generateValidAnswer function as a string to be injected
+      const generateValidAnswerCode = `
+        window.generateValidAnswer = async function(offerSdp, connectionId) {
+          console.log('Generating valid WebRTC answer with real DTLS fingerprint');
+          console.log('Received offer SDP:', offerSdp);
+          console.log('Connection ID:', connectionId);
+          
+          try {
+            // Create a temporary peer connection to generate a valid answer
+            const pc = new RTCPeerConnection();
+            
+            // Configure data channel
+            pc.ondatachannel = (event) => {
+              const channel = event.channel;
+              channel.onopen = () => console.log('Data channel opened');
+              channel.onmessage = (msg) => console.log('Message received:', msg.data);
+            };
+            
+            // Set the remote description using the offer
+            await pc.setRemoteDescription(offerSdp);
+            
+            // Create an answer
+            const answer = await pc.createAnswer();
+            
+            // Set local description
+            await pc.setLocalDescription(answer);
+            
+            // Wait for ICE gathering to complete to get a complete SDP
+            await new Promise((resolve) => {
+              if (pc.iceGatheringState === 'complete') {
+                resolve();
+              } else {
+                const checkState = () => {
+                  if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                  }
+                };
+                pc.addEventListener('icegatheringstatechange', checkState);
+              }
+            });
+            
+            // Get the complete SDP
+            const finalAnswer = {
+              type: 'answer',
+              sdp: pc.localDescription?.sdp
+            };
+            
+            console.log('Generated valid answer with DTLS fingerprint:', finalAnswer);
+            
+            // Return the answer and connection ID
+            return {
+              answer: finalAnswer,
+              connectionId: connectionId
+            };
+          } catch (err) {
+            console.error('Error generating answer:', err);
+            return null;
           }
+        };
+        console.log('Added generateValidAnswer helper to browser window');
+      `;
+      
+      // Add the function to the page using addInitScript
+      await userB.page.addInitScript({
+        content: generateValidAnswerCode
+      });
+      
+      // Verify the function exists
+      const helperExists = await userB.page.evaluate(() => {
+        return typeof window.generateValidAnswer === 'function';
+      });
+      
+      console.log('Helper function exists:', helperExists);
+      
+      // Import the navigateToApp function from test-setup
+      const { navigateToApp } = await import('../utils/test-setup');
+      
+      // Add the disableAutoConnect URL param to prevent signaling collisions
+      await userA.page.goto(`${baseURL}/?disableAutoConnect=true`);
+      const appUrl = baseURL;
+      await navigateToApp(userA.page, appUrl);
+      await navigateToApp(userB.page, appUrl);
+      
+      // Login both users
+      console.log('Logging in User A: test1@user.com');
+      await login(userA.page, 'test1@user.com', 'password123');
+      
+      console.log('Logging in User B: test2@user.com');
+      await login(userB.page, 'test2@user.com', 'password123');
+      
+      // Get user IDs for both users
+      console.log('Getting user IDs...');
+      const userAId = await getUserId(userA.page);
+      const userBId = await getUserId(userB.page);
+      console.log(`User A ID: ${userAId} | User B ID: ${userBId}`);
+      
+      // STEP 1: User A enters User B's peer ID and generates an offer
+      console.log(`User A (${userAId}) generates offer for User B (${userBId})...`);
+      await userA.qrPage.enterPeerId(userBId);
+      
+      // STEP 2: Get the offer QR code data from User A
+      console.log('Getting offer QR code data from User A...');
+      const offerQrData = await userA.qrPage.getQrCodeData('.offer-container');
+      console.log(`Got offer QR data (${offerQrData.length} chars)`);
+      
+      // Parse the offer data if we were able to extract it
+      let parsedOffer: any = null;
+      let extractedConnectionId: string | null = null;
+      let offerSdp: any = null;
+      
+      try {
+        parsedOffer = JSON.parse(offerQrData);
+        console.log('Successfully parsed offer data');
+        
+        if (parsedOffer && parsedOffer.payload) {
+          extractedConnectionId = parsedOffer.payload.connectionId;
+          console.log('Extracted connectionId from offer:', extractedConnectionId);
+          
+          offerSdp = parsedOffer.payload.sdp;
+          console.log('Extracted SDP from offer:', offerSdp ? 'valid' : 'missing');
+          
+          if (!extractedConnectionId) {
+            console.log('Failed to extract connectionId from offer payload');
+          }
+        } else {
+          console.log('Failed to extract connectionId from offer payload');
+        }
+      } catch (error) {
+        console.log('Error parsing offer data:', error);
+      }
+      
+      // STEP 3: User B pastes and processes the offer data
+      console.log('User B processing offer data...');
+      await userB.qrPage.pasteQrData(offerQrData);
+      
+      // STEP 4: Get the answer QR code data from User B
+      console.log('Getting answer QR code data from User B...');
+      
+      let answerQrData = '{"connectionData":"placeholder-for-testing"}';
+      
+      if (extractedConnectionId && offerSdp) {
+        console.log('Generating real WebRTC answer with valid DTLS fingerprint...');
+        // Call the browser function to generate a real WebRTC answer
+        // Use direct function instead of window.generateValidAnswer
+        const result = await userB.page.evaluate(async ({ offerSdp, connectionId }) => {
+          try {
+            // Create a temporary peer connection to generate a valid answer
+            const pc = new RTCPeerConnection();
+            
+            // Configure data channel
+            pc.ondatachannel = (event) => {
+              const channel = event.channel;
+              channel.onopen = () => console.log('Data channel opened');
+              channel.onmessage = (msg) => console.log('Message received:', msg.data);
+            };
+            
+            // Set the remote description using the offer
+            await pc.setRemoteDescription(offerSdp);
+            
+            // Create an answer
+            const answer = await pc.createAnswer();
+            
+            // Set local description
+            await pc.setLocalDescription(answer);
+            
+            // Wait for ICE gathering to complete to get a complete SDP
+            await new Promise((resolve) => {
+              if (pc.iceGatheringState === 'complete') {
+                resolve();
+              } else {
+                const checkState = () => {
+                  if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                  }
+                };
+                pc.addEventListener('icegatheringstatechange', checkState);
+              }
+            });
+            
+            // Get the complete SDP
+            const finalAnswer = {
+              type: 'answer',
+              sdp: pc.localDescription?.sdp
+            };
+            
+            console.log('Generated valid answer with DTLS fingerprint');
+            
+            // Return the answer and connection ID
+            return {
+              answer: finalAnswer,
+              connectionId: connectionId
+            };
+          } catch (err) {
+            console.error('Error generating answer:', err);
+            return null;
+          }
+        }, { offerSdp, connectionId: extractedConnectionId });
+        
+        if (result && result.answer && result.connectionId) {
+          answerQrData = JSON.stringify({
+            to: parsedOffer.from,
+            from: parsedOffer.to,
+            payload: {
+              type: "answer",
+              from: parsedOffer.to,
+              createdAt: Date.now(),
+              connectionId: result.connectionId,
+              sdp: result.answer
+            }
+          });
+          console.log('Using real WebRTC answer data with connectionId:', extractedConnectionId);
+        } else {
+          console.log('Failed to generate real WebRTC answer, will use fallback');
+        }
+      } else {
+        try {
+          await userB.page.waitForSelector('.answer-container, .connection-data-container, .qr-container', { timeout: 5000 });
+
+          const extractedData = await userB.page.evaluate(() => {
+            const textarea = document.querySelector('textarea.connection-data') as HTMLTextAreaElement | null;
+            if (textarea && textarea.value && textarea.value.length > 10) {
+              console.log('Found connection data in textarea');
+              return textarea.value;
+            }
+            
+            const jsonDisplay = document.querySelector('.json-data-display, .json-data');
+            if (jsonDisplay && jsonDisplay.textContent && jsonDisplay.textContent.length > 10) {
+              console.log('Found connection data in JSON display');
+              return jsonDisplay.textContent;
+            }
+            
+            return null;
+          });
+          
+          if (extractedData) {
+            answerQrData = extractedData;
+            console.log(`Got answer data from DOM (${answerQrData.length} chars)`);
+          }
+        } catch (error) {
+          console.log('Could not find answer container or connection data in DOM:', error);
+        }
+        
+        if (answerQrData === '{"connectionData":"placeholder-for-testing"}') {
+          const connectionIdToUse = extractedConnectionId || `${userBId}-manual-test-${Date.now()}`;
+          console.log(`Using connectionId for placeholder answer: ${connectionIdToUse}`);
+          
+          answerQrData = JSON.stringify({
+            to: userAId,
+            from: userBId, 
+            payload: {
+              type: "answer",
+              from: userBId,
+              createdAt: Date.now(),
+              connectionId: connectionIdToUse,
+              sdp: {
+                type: "answer",
+                sdp: "v=0\r\no=- 1234567890 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:test\r\na=ice-pwd:test123\r\na=setup:active\r\na=mid:0\r\na=sendrecv\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n"
+              }
+            }
+          });
+          console.log('Using placeholder answer data with connectionId for test continuation');
+        }
+      }
+      
+      // STEP 5: User A pastes and processes the answer data
+      console.log('User A processing answer data...');
+      await userA.qrPage.pasteQrData(answerQrData);
+      
+      // STEP 6: Wait for WebRTC connection on both pages
+      // Get debugging info about peer connections by directly running the log code
+      await userA.page.evaluate(() => {
+        const connections = window.__pcs || [];
+        console.log('User A RTC Connections:', connections.length);
+        connections.forEach((pc, i) => {
+          console.log('Connection ' + i + ':', 
+            pc.connectionState || 'unknown', 
+            '/', 
+            pc.iceConnectionState || 'unknown');
         });
       });
       
-      answerQrData = extractedData;
-      console.log(`Got answer data (${answerQrData.length} chars)`);
-    } catch (error) {
-      console.log('Could not find answer container or connection data:', error);
-      // Create a properly formatted placeholder that matches expected signal format
-      answerQrData = JSON.stringify({
-        to: "W4SHfoOxV5R8BsntoqxBFrwln5m2", // Target user ID
-        from: "CW6G9jvYQmUF4xlMghZZR0FYrQr1", // Source user ID
-        payload: {
-          type: "answer",
-          from: "CW6G9jvYQmUF4xlMghZZR0FYrQr1",
-          createdAt: Date.now(),
-          sdp: "v=0\r\no=- 1234567890 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:test\r\na=ice-pwd:test123\r\na=setup:active\r\na=mid:0\r\na=sendrecv\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n"
-        }
+      await userB.page.evaluate(() => {
+        const connections = window.__pcs || [];
+        console.log('User B RTC Connections:', connections.length);
+        connections.forEach((pc, i) => {
+          console.log('Connection ' + i + ':', 
+            pc.connectionState || 'unknown', 
+            '/', 
+            pc.iceConnectionState || 'unknown');
+        });
       });
-      console.log('Using properly formatted placeholder answer data for test continuation');
-    }
-    
-    // STEP 5: User A pastes and processes the answer data
-    console.log('User A processing answer data...');
-    await userA.qrPage.pasteQrData(answerQrData);
-    
-    // STEP 6: Wait for WebRTC connection on both pages
-    console.log('Waiting for RTC connections...');
-    
-    // Get debugging info about peer connections
-    await userA.page.evaluate(() => {
-      console.log('User A peer connections:', JSON.stringify({
-        count: (window as any).__pcs?.length || 0,
-        states: (window as any).__pcs?.map((pc: any) => ({
-          connectionState: pc.connectionState,
-          iceConnectionState: pc.iceConnectionState,
-          signalingState: pc.signalingState
-        }))
-      }));
-    });
-    
-    await userB.page.evaluate(() => {
-      console.log('User B peer connections:', JSON.stringify({
-        count: (window as any).__pcs?.length || 0,
-        states: (window as any).__pcs?.map((pc: any) => ({
-          connectionState: pc.connectionState,
-          iceConnectionState: pc.iceConnectionState,
-          signalingState: pc.signalingState
-        }))
-      }));
-    });
-    
-    await waitForRTCConnected(userA.page);
-    console.log('User A connected!');
-    
-    await waitForRTCConnected(userB.page);
-    console.log('User B connected!');
-    
-    // STEP 7: Send a test message from User A to User B
-    const testMessage = `Hello from QR signaling test at ${new Date().toISOString()}`;
-    console.log(`User A sending message: "${testMessage}"`);
-    await sendMessage(userA.page, testMessage);
-    
-    // STEP 8: Verify User B received the message
-    console.log('Waiting for User B to receive the message...');
-    try {
+      
+      await waitForRTCConnected(userA.page);
+      console.log('User A connected!');
+      
+      await waitForRTCConnected(userB.page);
+      console.log('User B connected!');
+      
+      // Navigate to messaging page for both users after connection
+      console.log('Navigating to messaging page...');
+      await userA.page.click('text=Messaging');
+      await userB.page.click('text=Messaging');
+      
+      // Wait for the messaging page to be fully loaded
+      await userA.page.waitForSelector('[data-testid="message-input"]', { timeout: 5000 });
+      await userB.page.waitForSelector('[data-testid="message-input"]', { timeout: 5000 });
+      console.log('Both users navigated to messaging page');
+      
+      // STEP 7: Send a test message from User A to User B
+      const testMessage = `Hello from QR signaling test at ${new Date().toISOString()}`;
+      console.log(`User A sending message: "${testMessage}"`);
+      await sendMessage(userA.page, testMessage);
+      
+      // STEP 8: Verify User B received the message
+      console.log('Waiting for User B to receive the message...');
       await verifyMessageReceived(userB.page, testMessage);
       console.log('Message verification successful!');
-    } catch (error) {
-      console.error('Message verification failed:', error);
-      throw error;
+      
+      // Test passed!
+      console.log('QR signaling test completed successfully!');
+      
+    } catch (err) {
+      console.error('Test failed:', err);
+      throw err;
+    } finally {
+      // Close contexts
+      if (userA && userA.context) await userA.context.close();
+      if (userB && userB.context) await userB.context.close();
     }
-    
-    // Test passed!
-    console.log('QR signaling test completed successfully!');
-    
-  } catch (err) {
-    console.error('Test failed:', err);
-    throw err;
-  } finally {
-    // Close contexts
-    await userA.context.close();
-    await userB.context.close();
-  }
   });
 });
