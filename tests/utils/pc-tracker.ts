@@ -56,17 +56,50 @@ export async function installPCTracker(contextOrPage: BrowserContext | Page) {
  * timeout.
  */
 export async function waitForRTCConnected(page: Page, timeout = 45000) {
-  await page.waitForFunction(() => {
-    const pcs: RTCPeerConnection[] = (window as any).__pcs || [];
-    const dcOpen = (window as any).__hasOpenDataChannel;
-    return (
-      dcOpen ||
-      pcs.some(
-        (pc) =>
-          pc.connectionState === 'connected' ||
-          pc.iceConnectionState === 'connected' ||
-          pc.iceConnectionState === 'completed'
-      )
-    );
-  }, { timeout });
+  // More resilient connection check with logging
+  await page.evaluate(() => {
+    console.log('Waiting for RTC connection...');
+    console.log('Current peer connections:', (window as any).__pcs?.length || 0);
+    if ((window as any).__pcs?.length) {
+      const states = (window as any).__pcs.map((pc: RTCPeerConnection) => ({
+        connectionState: pc.connectionState,
+        iceConnectionState: pc.iceConnectionState,
+        signalingState: pc.signalingState
+      }));
+      console.log('Connection states:', JSON.stringify(states));
+    }
+  });
+  
+  // Use polling approach instead of continuous function evaluation
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    const isConnected = await page.evaluate(() => {
+      const pcs: RTCPeerConnection[] = (window as any).__pcs || [];
+      const dcOpen = (window as any).__hasOpenDataChannel;
+      
+      const connected = dcOpen ||
+        pcs.some(
+          (pc) =>
+            pc.connectionState === 'connected' ||
+            pc.iceConnectionState === 'connected' ||
+            pc.iceConnectionState === 'completed'
+        );
+      
+      if (connected) {
+        console.log('RTC connection established!');
+      }
+      
+      return connected;
+    });
+    
+    if (isConnected) {
+      return;
+    }
+    
+    // Wait a bit before checking again
+    await page.waitForTimeout(500);
+  }
+  
+  // If we get here, timeout was exceeded
+  throw new Error(`RTC connection not established within ${timeout}ms`);
 }

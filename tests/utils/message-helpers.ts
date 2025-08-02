@@ -13,10 +13,26 @@ export async function sendMessage(page: Page, message: string): Promise<void> {
     // Fill the message input
     await page.fill('[data-testid="message-input"]', message);
     
-    // Either press Enter or click the Send button
+    // Wait until the Send button is actually enabled (Playwright-level)
+    const sendBtn = page.locator('[data-testid="send-btn"]');
+    await sendBtn.waitFor({ state: 'visible', timeout: 10000 });
+    await sendBtn.waitFor({ state: 'attached', timeout: 10000 });
+    await page.waitForFunction(
+      (sel) => {
+        const btn = document.querySelector<HTMLButtonElement>(sel);
+        return !!btn && !btn.disabled;
+      },
+      '[data-testid="send-btn"]',
+      { timeout: 10000 }
+    );
+
+    // Press Enter first (many React inputs submit on Enter)
     await page.press('[data-testid="message-input"]', 'Enter');
-    // Fallback in case keypress doesn't submit (React synthetic events)
-    await page.click('[data-testid="send-btn"]');
+
+    // Fallback click only if button became enabled
+    if (await sendBtn.isEnabled()) {
+      await sendBtn.click();
+    }
     
     console.log('Message sent successfully');
     

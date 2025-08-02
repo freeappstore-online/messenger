@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // P2P signalling
+    match /signals/{recipientUid}/inbox/{docId} {
+      // any signed-in user may write a signal
+      allow create: if request.auth != null;
+
+      // only the recipient can read / delete
+      allow read, delete: if request.auth != null
+                          && request.auth.uid == recipientUid;
+    }
+    
+    // User management
+    match /users/{userId} {
+      // only the user can read / write their own data
+      allow read, write, create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Family management
+    match /families/{familyId} {
+      // Allow read access to family data if user is authenticated
+      allow read: if request.auth != null;
+      
+      // Allow creating new families if user is authenticated
+      allow create: if request.auth != null;
+      
+      // Family members subcollection
+      match /members/{memberId} {
+        // Anyone can read member list
+        allow read: if request.auth != null;
+        
+        // Only the user themselves or existing family members can add/update members
+        allow create, update: if request.auth != null && (
+          request.auth.uid == memberId || 
+          exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid))
+        );
+      }
+      
+      // Family invites subcollection
+      match /invites/{inviteId} {
+        // Anyone can read invites if authenticated
+        allow read: if request.auth != null;
+        
+        // Only family members can create invites
+        allow create: if request.auth != null &&
+          // Must be a family member to create an invite
+          exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid)) &&
+          // Inviter ID must match the current user
+          request.resource.data.inviterId == request.auth.uid;
+        
+        // Special rule for approving invites
+        allow update: if request.auth != null &&
+          // Must be a family member to approve
+          exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid)) &&
+          // Cannot approve your own invite
+          resource.data.inviterId != request.auth.uid &&
+          // The only change allowed is adding user's ID to approvals array
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvals']) &&
+          // New approvals must contain all previous approvals plus only the current user
+          request.resource.data.approvals.hasAll(resource.data.approvals) &&
+          request.resource.data.approvals.hasOnly(resource.data.approvals.concat([request.auth.uid]));
+      }
+    }
+  }
+}

@@ -42,8 +42,8 @@ function setupConsoleLogging(page: Page, label: string): void {
 
 // Test for P2P connection between two browser contexts
 test('Two users can connect via WebRTC and exchange messages', async ({ browser, baseURL }) => {
-  // Allow up to 90 s while we stabilise tests
-  test.setTimeout(90000);
+  // Shorter overall test timeout – connections should establish quickly
+  test.setTimeout(30000);
   
   // Check if the server is available
   const serverUrl = baseURL || 'http://localhost:5173';
@@ -155,8 +155,8 @@ test('Two users can connect via WebRTC and exchange messages', async ({ browser,
 
     // Wait for WebRTC connection on both pages (data-channel open or pc connected)
     await Promise.all([
-      waitForRTCConnected(userAPage, 45000),
-      waitForRTCConnected(userBPage, 45000)
+      waitForRTCConnected(userAPage, 30000),
+      waitForRTCConnected(userBPage, 30000)
     ]);
 
     console.log('Connection established successfully on both sides!');

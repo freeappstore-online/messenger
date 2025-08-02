@@ -19,6 +19,7 @@ export const createFirestoreService = (db: Firestore): FirestoreService => ({
   },
   async add(path, data) {
     const ref = await addDoc(collection(db, path), data as DocumentData);
+    console.log(`[FS] addDoc ${path} id=${ref.id}`);
     return ref.id;
   },
   async remove(path) {
@@ -29,6 +30,7 @@ export const createFirestoreService = (db: Firestore): FirestoreService => ({
   },
   listenCollection(path, cb) {
     return onSnapshot(collection(db, path), (qs: QuerySnapshot) => {
+      console.log(`[FS] snapshot ${path} docs=${qs.docs.length}`);
       const out = qs.docs.map(d => ({ id: d.id, data: d.data() as any }));
       cb(out);
     });

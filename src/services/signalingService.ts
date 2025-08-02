@@ -1,21 +1,29 @@
 import type { FirestoreService } from './firestoreService';
+import type { ISignalingService } from './signalingInterface';
 
 export type SignalPayload =
   | { type: 'offer'; sdp: RTCSessionDescriptionInit }
   | { type: 'answer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'ice'; candidate: RTCIceCandidateInit };
+  | { type: 'ice'; candidate: RTCIceCandidateInit }
+  | { type: 'simple-peer'; data: any }; // Simple-Peer signaling data
 
 export interface StoredSignal {
-  type: 'offer' | 'answer' | 'ice';
+  type: 'offer' | 'answer' | 'ice' | 'simple-peer';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  data?: any; // Simple-Peer signaling data
   from: string;
   createdAt: number;
 }
 
-export class SignalingService {
+export class SignalingService implements ISignalingService {
   private fs: FirestoreService;
-  private me: string;
+  readonly me: string; // Changed from private to public readonly to match interface
+
+  // Remove whitespace and common clipboard symbol from any copied ID
+  private static sanitizeId(id: string): string {
+    return id.replace(/\s|\u{1F4CB}/gu, "");
+  }
   
   constructor(fs: FirestoreService, me: string) {
     this.fs = fs;
@@ -23,20 +31,27 @@ export class SignalingService {
   }
 
   async send(toUserId: string, payload: SignalPayload) {
-    await this.fs.add<StoredSignal>(`signals/${toUserId}/inbox`, {
+    const cleanId = SignalingService.sanitizeId(toUserId);
+    console.log(`[Signal] send ${payload.type} to ${cleanId}`);
+    await this.fs.add<StoredSignal>(`signals/${cleanId}/inbox`, {
       ...payload,
-      from: this.me,
+      from: SignalingService.sanitizeId(this.me),
       createdAt: Date.now()
     });
   }
 
   listen(cb: (id: string, sig: StoredSignal) => void) {
-    return this.fs.listenCollection<StoredSignal>(`signals/${this.me}/inbox`, items => {
-      items.forEach(({ id, data }) => cb(id, data));
+    const cleanMe = SignalingService.sanitizeId(this.me);
+    return this.fs.listenCollection<StoredSignal>(`signals/${cleanMe}/inbox`, items => {
+      items.forEach(({ id, data }) => {
+        console.log(`[Signal] received ${data.type} from ${data.from}`);
+        cb(id, data);
+      });
     });
   }
 
   async ack(id: string) {
-    await this.fs.remove(`signals/${this.me}/inbox/${id}`);
+    const cleanMe = SignalingService.sanitizeId(this.me);
+    await this.fs.remove(`signals/${cleanMe}/inbox/${id}`);
   }
 }
