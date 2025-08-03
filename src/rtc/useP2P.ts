@@ -41,16 +41,33 @@ export function useP2P(
 
   return {
     async connectTo(peerId) {
-      await manager?.connectTo(peerId);
+      if (!signaling || !manager) return;
+      await manager.connectTo(peerId);
     },
     disconnectFrom(peerId) {
-      manager?.disconnectFrom(peerId);
+      if (!signaling || !manager) return;
+      // Check which method is available and use it appropriately
+      if ('disconnectFrom' in manager) {
+        (manager as any).disconnectFrom(peerId);
+      } else {
+        // Use disconnect method from P2PManager2
+        (manager as any).disconnect(peerId);
+      }
     },
     send(bytes) {
-      manager?.broadcast(bytes);
+      if (!signaling || !manager) return;
+      // Use broadcast to send to all connected peers
+      manager.broadcast(bytes);
     },
     broadcastPresence(isOnline) {
-      manager?.broadcastPresence(isOnline);
+      if (!signaling || !manager) return;
+      // In our new implementation, we use updatePresence instead of broadcastPresence
+      if ('broadcastPresence' in manager) {
+        (manager as any).broadcastPresence(isOnline);
+      } else {
+        // Use updatePresence method from P2PManager2
+        (manager as any).updatePresence(isOnline);
+      }
     },
     connections
   };

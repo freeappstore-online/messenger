@@ -1,4 +1,5 @@
-import { P2PManager, P2PManagerOptions } from '../../src/rtc/p2pManager';
+import { P2PManager } from '../../src/rtc/p2pManager2';
+import type { P2PManagerOptions } from '../../src/rtc/p2pUtils';
 import type { StoredSignal } from '../../src/services/signalingService';
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MockSignalingService, createSignal } from './mockSignalingService';
@@ -24,11 +25,13 @@ describe('P2PManager', () => {
     connectionStateCallback = vi.fn();
     dataChannelOpenCallback = vi.fn();
 
-    p2pManager = new P2PManager('zzzz', signalingService as any, {
-      onMessage: messageCallback,
-      onConnectionState: connectionStateCallback,
-      onDataChannelOpen: dataChannelOpenCallback
+    p2pManager = new P2PManager('zzzz', 'TestUser', signalingService, {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
+    
+    // Set callbacks using the proper methods
+    p2pManager.onMessage(messageCallback);
+    p2pManager.onConnectionStateChanged(connectionStateCallback);
   });
 
   test('should handle offer signaling messages correctly', async () => {

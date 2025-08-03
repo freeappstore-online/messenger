@@ -1,6 +1,6 @@
 import Peer from "simple-peer";
 import type { ISignalingService } from "../services/signalingInterface";
-import type { P2PManagerOptions } from "./p2pManager";
+import type { P2PManagerOptions } from "./p2pUtils";
 
 // Message types for P2P communication
 const MESSAGE_TYPE = {
@@ -13,6 +13,7 @@ type P2PMessageType = typeof MESSAGE_TYPE[keyof typeof MESSAGE_TYPE];
 
 // Message format for P2P messages
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+// @ts-ignore - Legacy interface kept for reference
 interface P2PMessage {
   type: P2PMessageType;
   payload: any;

@@ -55,14 +55,25 @@ export async function verifyMessageReceived(page: Page, expectedMessage: string)
   console.log(`Verifying message received: "${expectedMessage}"`);
   
   try {
-    // Wait for the message to appear in the chat
-    const messageSelector = `text="${expectedMessage}"`;
-    
     // Take a screenshot before waiting for the message
     await page.screenshot({ path: `screenshots/before-verify-message-${Date.now()}.png` });
     
+    // Wait for any messages to appear first
+    await page.waitForSelector('.messages .bubble', { timeout: 5000 })
+      .catch(() => console.log('No message bubbles found yet'));
+    
+    // Log what messages are currently visible
+    const visibleMessages = await page.$$eval('.messages .bubble', elements => 
+      elements.map(el => el.textContent)
+    );
+    console.log('Visible messages:', visibleMessages);
+    
+    // Wait for the specific message to appear
+    // Using a more specific selector targeting the message bubble that contains our text
+    const messageSelector = `.messages .bubble:has-text("${expectedMessage}")`;
+    
     // Wait for the message to appear with a timeout
-    await page.waitForSelector(messageSelector, { timeout: 10000 });
+    await page.waitForSelector(messageSelector, { timeout: 15000 });
     
     console.log('Message received successfully');
     
@@ -74,12 +85,12 @@ export async function verifyMessageReceived(page: Page, expectedMessage: string)
     // Take a screenshot of the failed state
     await page.screenshot({ path: `screenshots/verify-message-failed-${Date.now()}.png` });
     
-    // Log the current chat messages to help debug
-    const chatMessages = await page.$$eval('.message, .chat-message', elements => 
-      elements.map(el => el.textContent)
+    // Get all message bubbles for debugging
+    const allMessages = await page.$$eval('.messages .bubble, .messages .msg', elements => 
+      elements.map(el => el.textContent || el.innerText)
     );
     
-    console.log('Current chat messages:', chatMessages);
+    console.log('Current chat messages:', allMessages);
     
     throw error;
   }

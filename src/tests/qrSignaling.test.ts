@@ -1,4 +1,5 @@
-import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 /**
  * Tests for QR code signaling between two browser contexts
