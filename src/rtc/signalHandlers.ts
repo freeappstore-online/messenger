@@ -1,182 +1,141 @@
-import type { PeerInfo, PresenceMessage } from './p2pUtils';
-import type { ISignalingService } from '../services/signalingInterface';
 import type { StoredSignal } from "../services/signalingService";
+import type { PeerInfo } from "./p2pUtils";
+import type { SignalHandlerContext } from "./types";
 
-/**
- * Handles an offer signal from a remote peer
- * 
- * @param peer - The peer information
- * @param fromId - The ID of the peer that sent the signal
- * @param sig - The stored signal data
- */
-export async function handleOfferSignal(
-  peer: PeerInfo,
+export async function handleSignal(
+  context: SignalHandlerContext,
   fromId: string,
-  sig: StoredSignal
+  signal: StoredSignal
 ): Promise<void> {
-  console.log(`[P2PManager] Processing offer from ${fromId}`);
-
-  const pc = peer.pc;
-  
-  // Ensure this is an offer signal
-  if (sig.type !== 'offer' || !sig.sdp) {
-    console.log('[P2PManager] Invalid offer signal');
+  if (!signal || !signal.type) {
+    console.warn("Received invalid signal:", signal);
     return;
   }
-  
-  // Check if we've already processed this exact offer by comparing the SDP string
-  const sdpString = JSON.stringify(sig.sdp);
-  if (peer.lastProcessedOfferSdp === sdpString) {
-    console.log('[P2PManager] Ignoring duplicate offer');
-    return;
-  }
-
-  // Store the processed SDP as a string for future comparison
-  peer.lastProcessedOfferSdp = sdpString;
 
   try {
-    const offerCollision = pc.signalingState !== "stable";
-    
-    // If polite, rollback if needed; if impolite, ignore the offer
-    if (offerCollision) {
-      if (!peer.polite) {
-        console.log("[P2PManager] Ignoring colliding offer as impolite peer");
-        return;
-      }
-      
-      // Polite peer rolls back to stable state before processing offer
-      console.log("[P2PManager] Rolling back as polite peer");
-      await Promise.all([
-        pc.setLocalDescription({ type: "rollback" }),
-        pc.setRemoteDescription(sig.sdp)
-      ]);
-    } else {
-      await pc.setRemoteDescription(sig.sdp);
-    }
-    
-    // Create and send our answer
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    await context.signaling.ack(fromId);
+  } catch (error) {
+    console.error("Error acknowledging signal:", error);
+  }
 
-    console.log(`[P2PManager] Sending answer to ${fromId}`);
+  const peer = context.peers.get(fromId);
+  if (!peer) {
+    console.warn(`Received signal from unknown peer: ${fromId}`);
     return;
-  } catch (e) {
-    console.error("[P2PManager] Error handling offer:", e);
+  }
+
+  console.log(`Received ${signal.type} signal from ${fromId}`);
+
+  try {
+    switch (signal.type) {
+      case "offer":
+        await handleOfferSignal(context, fromId, peer, signal);
+        break;
+      case "answer":
+        await handleAnswerSignal(context, fromId, peer, signal);
+        break;
+      case "ice":
+        await handleIceCandidateSignal(peer, signal);
+        break;
+      default:
+        console.warn(`Unknown signal type: ${signal.type}`);
+    }
+  } catch (error) {
+    console.error(`Error processing ${signal.type} from ${fromId}:`, error);
   }
 }
 
-/**
- * Handles an answer signal from a remote peer
- * 
- * @param fromId - The ID of the peer that sent the signal
- * @param sig - The stored signal data
- * @param peer - The peer information
- * @param signaling - The signaling service
- */
-export async function handleAnswerSignal(
-  fromId: string, 
-  sig: StoredSignal, 
-  peer: PeerInfo, 
-  _signaling: ISignalingService // Renamed with underscore to indicate it's not used
+async function handleOfferSignal(
+  context: SignalHandlerContext,
+  fromId: string,
+  peer: PeerInfo,
+  signal: StoredSignal
 ): Promise<void> {
-  console.log(`[P2PManager] Processing answer from ${fromId}`);
+  if (!signal.sdp) return;
 
-  const pc = peer.pc;
-  
-  // Ensure this is an answer signal
-  if (sig.type !== 'answer' || !sig.sdp) {
-    console.log('[P2PManager] Invalid answer signal');
+  const offerSdp = JSON.stringify(signal.sdp);
+  if (peer.lastProcessedOfferSdp === offerSdp) {
+    console.log("[P2PManager] Ignoring duplicate offer");
     return;
   }
-  
-  // Check if we've already processed this exact answer by comparing SDP string
-  const sdpString = JSON.stringify(sig.sdp);
-  if (peer.lastProcessedAnswerSdp === sdpString) {
-    console.log('[P2PManager] Ignoring duplicate answer');
-    return;
-  }
+  peer.lastProcessedOfferSdp = offerSdp;
 
-  // Store the processed SDP as a string for future comparison
-  peer.lastProcessedAnswerSdp = sdpString;
+  const offerCollision = peer.pc.signalingState !== "stable";
 
-  try {
-    // Mark that we're setting a remote answer to handle glare
-    peer.settingRemoteAnswer = true;
-    await pc.setRemoteDescription(sig.sdp);
-  } catch (e) {
-    console.error("[P2PManager] Error handling answer:", e);
-  } finally {
-    peer.settingRemoteAnswer = false;
-  }
-  
-  // Process any queued ICE candidates
-  if (peer.pendingCandidates && peer.pendingCandidates.length > 0) {
-    console.log(`[P2PManager] Processing ${peer.pendingCandidates.length} queued ICE candidates`);
-    for (const candidate of peer.pendingCandidates) {
-      try {
-        await pc.addIceCandidate(candidate);
-      } catch (e) {
-        console.error("[P2PManager] Error adding queued ICE candidate:", e);
-      }
+  if (offerCollision) {
+    if (!peer.polite) {
+      console.log("[P2PManager] Ignoring colliding offer as impolite peer");
+      return;
     }
-    peer.pendingCandidates = [];
+    if (peer.pc.signalingState === "have-local-offer") {
+      console.log("[P2PManager] Rolling back local offer due to collision");
+      await peer.pc.setLocalDescription({ type: "rollback" });
+    }
   }
+
+  await peer.pc.setRemoteDescription(signal.sdp);
+
+  if (peer.pc.signalingState === "have-remote-offer") {
+    const answer = await peer.pc.createAnswer();
+    await peer.pc.setLocalDescription(answer);
+    const localDesc = peer.pc.localDescription;
+    if (localDesc) {
+      context.sendSignalingMessage(fromId, {
+        type: "answer",
+        sdp: localDesc,
+      });
+    }
+  }
+
+  context.flushPendingIceCandidates(fromId, peer.pc);
 }
 
-/**
- * Handles an ICE candidate signal from a remote peer
- * 
- * @param peer - The peer information
- * @param sig - The stored signal data
- */
-export async function handleIceCandidateSignal(
-  peer: PeerInfo, 
-  sig: StoredSignal
+async function handleAnswerSignal(
+  context: SignalHandlerContext,
+  fromId: string,
+  peer: PeerInfo,
+  signal: StoredSignal
 ): Promise<void> {
-  const pc = peer.pc;
-  
-  // Only process ICE candidates if we have a remote description
-  if (pc.remoteDescription && pc.remoteDescription.type) {
-    console.log("[P2PManager] Processing ICE candidate");
-    try {
-      await pc.addIceCandidate(sig.candidate!);
-    } catch (e) {
-      if (pc.signalingState === "stable") {
-        // Only log as error when in stable state, otherwise it's likely just a race condition
-        console.error("[P2PManager] Error adding ICE candidate:", e);
-      } else {
-        console.log(
-          "[P2PManager] Could not add ICE candidate in state",
-          pc.signalingState
-        );
-      }
-    }
+  if (!signal.sdp) return;
+
+  const answerSdp = JSON.stringify(signal.sdp);
+  if (peer.lastProcessedAnswerSdp === answerSdp) {
+    console.log("[P2PManager] Ignoring duplicate answer");
+    return;
+  }
+  peer.lastProcessedAnswerSdp = answerSdp;
+
+  peer.settingRemoteAnswer = true;
+
+  if (peer.pc.signalingState === "have-local-offer") {
+    await peer.pc.setRemoteDescription(signal.sdp);
   } else {
-    console.log("[P2PManager] Storing ICE candidate for later");
-    // Initialize the array if needed
-    peer.pendingCandidates = peer.pendingCandidates || [];
-    peer.pendingCandidates.push(sig.candidate!);
+    console.log(
+      `[P2PManager] Cannot apply answer in current state: ${peer.pc.signalingState}`
+    );
   }
+
+  peer.settingRemoteAnswer = false;
+  context.flushPendingIceCandidates(fromId, peer.pc);
 }
 
-/**
- * Handles a presence message from a remote peer
- * 
- * @param peerId - The ID of the peer that sent the message
- * @param message - The presence message
- * @param onPresenceUpdate - Callback for presence updates
- */
-export function handlePresenceMessage(
-  peerId: string, 
-  message: PresenceMessage,
-  onPresenceUpdate?: (peerId: string, isOnline: boolean) => void
-): void {
-  console.log(
-    `[P2PManager] Received presence from ${message.userId}: ${
-      message.isOnline ? "online" : "offline"
-    }`
-  );
+async function handleIceCandidateSignal(
+  peer: PeerInfo,
+  signal: StoredSignal
+): Promise<void> {
+  if (!signal.candidate) return;
 
-  // Get all connections for this peer
-  onPresenceUpdate?.(peerId, message.isOnline);
+  try {
+    if (peer.pc.remoteDescription && peer.pc.remoteDescription.type) {
+      await peer.pc.addIceCandidate(signal.candidate);
+    } else {
+      peer.pendingCandidates = peer.pendingCandidates || [];
+      peer.pendingCandidates.push(signal.candidate);
+      console.log(
+        `[P2PManager] Stored ICE candidate for later (no remote description yet)`
+      );
+    }
+  } catch (error) {
+    console.error("[P2PManager] Error adding ICE candidate:", error);
+  }
 }
