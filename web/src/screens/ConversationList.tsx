@@ -1,6 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import type { Conversation } from '../hooks/useConversations';
 import { ConversationItem } from '../components/ConversationItem';
 
@@ -8,37 +6,25 @@ interface Props {
   conversations: Conversation[];
   currentUserId: string;
   onlineUsers: Set<string>;
+  userNames: Map<string, string>;
 }
 
-export function ConversationList({ conversations, currentUserId, onlineUsers }: Props) {
+export function ConversationList({ conversations, currentUserId, onlineUsers, userNames }: Props) {
   const navigate = useNavigate();
-
-  const startNewChat = async () => {
-    const peerId = prompt('Enter user ID to chat with:');
-    if (!peerId || peerId === currentUserId) return;
-
-    // Create deterministic conversation ID
-    const sorted = [currentUserId, peerId].sort();
-    const convId = sorted.join(':');
-    await setDoc(doc(db, 'conversations', convId), {
-      type: '1:1',
-      members: sorted,
-      name: null,
-      lastMessage: null,
-      lastMessageAt: null,
-      updatedAt: Date.now(),
-    }, { merge: true });
-    navigate(`/chat/${convId}`);
-  };
 
   return (
     <div>
-      <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee' }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Chats</h2>
-        <button onClick={startNewChat} style={newChatBtn}>+ New Chat</button>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        <h2 className="text-lg font-bold text-gray-100">Chats</h2>
+        <button
+          onClick={() => navigate('/contacts')}
+          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-medium transition-colors"
+        >
+          + New Chat
+        </button>
       </div>
       {conversations.length === 0 && (
-        <p style={{ padding: 24, textAlign: 'center', color: '#888' }}>No conversations yet. Start a new chat!</p>
+        <p className="py-6 text-center text-sm text-gray-500">No conversations yet. Start a new chat!</p>
       )}
       {conversations.map(c => {
         const otherMembers = c.members.filter(m => m !== currentUserId);
@@ -50,14 +36,10 @@ export function ConversationList({ conversations, currentUserId, onlineUsers }: 
             currentUserId={currentUserId}
             onClick={() => navigate(`/chat/${c.id}`)}
             online={c.type === '1:1' ? isOnline : undefined}
+            userNames={userNames}
           />
         );
       })}
     </div>
   );
 }
-
-const newChatBtn: React.CSSProperties = {
-  padding: '6px 14px', background: '#007aff', color: '#fff',
-  border: 'none', borderRadius: 16, fontSize: 14, cursor: 'pointer',
-};

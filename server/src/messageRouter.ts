@@ -19,16 +19,18 @@ async function handleChat(
   fromUserId: string,
   msg: Extract<ClientMessage, { type: 'chat' }>
 ) {
+  console.log(`[chat] ${fromUserId} -> ${msg.to} (${msg.convId}) msgId=${msg.message.id}`);
   // Persist
   await saveMessage(msg.message);
 
   // Deliver to recipient
-  sendTo(msg.to, {
+  const delivered = sendTo(msg.to, {
     type: 'chat',
     from: fromUserId,
     convId: msg.convId,
     message: msg.message,
   });
+  console.log(`[chat] delivered=${delivered} to=${msg.to}`);
 
   // Ack to sender
   sendTo(fromUserId, { type: 'ack', messageId: msg.message.id });
@@ -62,11 +64,12 @@ function handleSignal(
   fromUserId: string,
   msg: Extract<ClientMessage, { type: 'signal' }>
 ) {
-  sendTo(msg.to, {
+  const delivered = sendTo(msg.to, {
     type: 'signal',
     from: fromUserId,
     payload: msg.payload,
   });
+  console.log(`[signal] ${fromUserId} -> ${msg.to} ${(msg.payload as { type: string }).type} delivered=${delivered}`);
 }
 
 async function handleSync(

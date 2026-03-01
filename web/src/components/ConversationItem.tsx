@@ -5,35 +5,30 @@ interface Props {
   currentUserId: string;
   onClick: () => void;
   online?: boolean;
+  userNames: Map<string, string>;
 }
 
-export function ConversationItem({ conversation, currentUserId, onClick, online }: Props) {
+export function ConversationItem({ conversation, currentUserId, onClick, online, userNames }: Props) {
   const otherMembers = conversation.members.filter(m => m !== currentUserId);
-  const displayName = conversation.name || otherMembers.join(', ') || 'Chat';
+  const resolvedNames = otherMembers.map(m => userNames.get(m) ?? m);
+  const displayName = conversation.name || resolvedNames.join(', ') || 'Chat';
 
   return (
-    <div onClick={onClick} style={rowStyle}>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div onClick={onClick} className="px-4 py-3 border-b border-gray-800 cursor-pointer hover:bg-gray-900 transition-colors">
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
           {online !== undefined && (
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: online ? '#4caf50' : '#bbb',
-              display: 'inline-block',
-            }} />
+            <span className="relative flex h-2 w-2">
+              {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />}
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${online ? 'bg-green-500' : 'bg-gray-600'}`} />
+            </span>
           )}
-          <span style={{ fontWeight: 600, fontSize: 15 }}>{displayName}</span>
+          <span className="font-semibold text-sm text-gray-100">{displayName}</span>
         </div>
         {conversation.lastMessage && (
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {conversation.lastMessage}
-          </p>
+          <p className="mt-1 text-xs text-gray-500 truncate">{conversation.lastMessage}</p>
         )}
       </div>
     </div>
   );
 }
-
-const rowStyle: React.CSSProperties = {
-  padding: '12px 16px', borderBottom: '1px solid #eee', cursor: 'pointer',
-};

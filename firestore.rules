@@ -52,9 +52,21 @@ service cloud.firestore {
       }
     }
 
-    // Contacts — private per user
+    // Contacts — private per user; either owner or the contact themselves can create (for accept flow)
     match /contacts/{ownerId}/list/{contactId} {
-      allow read, write: if request.auth != null && request.auth.uid == ownerId;
+      allow read, delete: if request.auth != null && request.auth.uid == ownerId;
+      allow create: if request.auth != null
+                    && (request.auth.uid == ownerId || request.auth.uid == contactId)
+                    && request.resource.data.keys().hasOnly(['userId', 'displayName', 'email', 'addedAt']);
+    }
+
+    // Contact requests — sender creates/overwrites, recipient reads/deletes
+    match /contactRequests/{recipientId}/inbox/{senderId} {
+      allow read, delete: if request.auth != null && request.auth.uid == recipientId;
+      allow create, update: if request.auth != null
+                            && request.auth.uid == senderId
+                            && request.resource.data.fromUserId == request.auth.uid
+                            && request.resource.data.keys().hasOnly(['fromUserId', 'fromDisplayName', 'fromEmail', 'createdAt']);
     }
 
     // Channels

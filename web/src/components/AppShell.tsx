@@ -16,23 +16,22 @@ export function AppShell({ children }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Hide bottom nav on chat detail screens
   const hideNav = location.pathname.startsWith('/chat/') || location.pathname.startsWith('/channel/');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+    <div className="flex flex-col h-dvh">
+      <div className="flex-1 overflow-auto">
         {children}
       </div>
       {!hideNav && (
-        <nav style={navStyle}>
+        <nav className="flex border-t border-gray-800 bg-gray-900">
           {tabs.map(t => {
             const active = location.pathname === t.path;
             return (
               <button
                 key={t.path}
                 onClick={() => navigate(t.path)}
-                style={{ ...tabBtn, color: active ? '#007aff' : '#8e8e93' }}
+                className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${active ? 'text-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
               >
                 {t.label}
               </button>
@@ -43,12 +42,3 @@ export function AppShell({ children }: Props) {
     </div>
   );
 }
-
-const navStyle: React.CSSProperties = {
-  display: 'flex', borderTop: '1px solid #eee', background: '#fff',
-};
-
-const tabBtn: React.CSSProperties = {
-  flex: 1, padding: '10px 0', background: 'none', border: 'none',
-  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-};

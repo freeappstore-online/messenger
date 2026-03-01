@@ -16,30 +16,17 @@ export function Composer({ onSend }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={formStyle}>
+    <form onSubmit={handleSubmit} className="flex gap-2 px-3 py-2 border-t border-gray-800 bg-gray-900">
       <input
         type="text"
         value={text}
         onChange={e => setText(e.target.value)}
         placeholder="Type a message..."
-        style={inputStyle}
+        className="flex-1 px-3 py-2.5 border border-gray-700 rounded-full bg-gray-800 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
       />
-      <button type="submit" style={btnStyle}>Send</button>
+      <button type="submit" className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors">
+        Send
+      </button>
     </form>
   );
 }
-
-const formStyle: React.CSSProperties = {
-  display: 'flex', gap: 8, padding: '8px 12px',
-  borderTop: '1px solid #eee', background: '#fff',
-};
-
-const inputStyle: React.CSSProperties = {
-  flex: 1, padding: '10px 12px', border: '1px solid #ccc',
-  borderRadius: 20, fontSize: 15, outline: 'none',
-};
-
-const btnStyle: React.CSSProperties = {
-  padding: '10px 20px', background: '#007aff', color: '#fff',
-  border: 'none', borderRadius: 20, fontSize: 15, cursor: 'pointer',
-};

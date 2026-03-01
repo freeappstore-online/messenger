@@ -19,45 +19,38 @@ export function LoginScreen({ loginEmail, loginGoogle }: Pick<AuthAPI, 'loginEma
   };
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-      <h1 style={{ fontSize: 24, marginBottom: 24 }}>Sign In</h1>
+    <div className="max-w-sm mx-auto mt-20 px-6">
+      <h1 className="text-2xl font-bold text-gray-100 mb-6">Sign In</h1>
       <form onSubmit={handleSubmit}>
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          style={inputStyle}
+          className="block w-full px-3 py-2.5 mb-3 border border-gray-700 rounded-lg bg-gray-800 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={e => setPassword(e.target.value)}
-          style={inputStyle}
+          className="block w-full px-3 py-2.5 mb-3 border border-gray-700 rounded-lg bg-gray-800 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
-        {error && <p style={{ color: 'red', fontSize: 14 }}>{error}</p>}
-        <button type="submit" style={btnStyle}>Sign In</button>
+        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+        <button type="submit" className="block w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors">
+          Sign In
+        </button>
       </form>
-      <hr style={{ margin: '24px 0' }} />
-      <button onClick={() => loginGoogle()} style={{ ...btnStyle, background: '#4285f4' }}>
+      <hr className="border-gray-800 my-6" />
+      <button
+        onClick={() => loginGoogle()}
+        className="block w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+      >
         Sign in with Google
       </button>
-      <p style={{ marginTop: 16, fontSize: 13, color: '#888' }}>
+      <p className="mt-4 text-xs text-gray-500">
         Test: test1@user.com / test123 or test2@user.com / test123
       </p>
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  display: 'block', width: '100%', padding: '10px 12px',
-  marginBottom: 12, border: '1px solid #ccc', borderRadius: 6, fontSize: 15,
-  boxSizing: 'border-box',
-};
-
-const btnStyle: React.CSSProperties = {
-  display: 'block', width: '100%', padding: '10px 12px',
-  background: '#333', color: '#fff', border: 'none', borderRadius: 6,
-  fontSize: 15, cursor: 'pointer',
-};

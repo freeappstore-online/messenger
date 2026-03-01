@@ -5,9 +5,12 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
+  deleteUser,
   type User,
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -17,6 +20,19 @@ export function useAuth() {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+      if (u) {
+        // Ensure user profile exists in Firestore so others can find us by email
+        const ref = doc(db, 'users', u.uid);
+        getDoc(ref).then(snap => {
+          if (!snap.exists()) {
+            setDoc(ref, {
+              displayName: u.displayName || '',
+              email: u.email || '',
+              createdAt: Date.now(),
+            });
+          }
+        });
+      }
     });
   }, []);
 
@@ -28,5 +44,15 @@ export function useAuth() {
 
   const logout = () => signOut(auth);
 
-  return { user, loading, loginEmail, loginGoogle, logout };
+  const deleteAccount = async () => {
+    const u = auth.currentUser;
+    if (!u) return;
+    // Delete user's Firestore data
+    const contactsSnap = await getDocs(collection(db, 'contacts', u.uid, 'list'));
+    await Promise.all(contactsSnap.docs.map(d => deleteDoc(d.ref)));
+    await deleteDoc(doc(db, 'users', u.uid));
+    await deleteUser(u);
+  };
+
+  return { user, loading, loginEmail, loginGoogle, logout, deleteAccount };
 }

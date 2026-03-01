@@ -1,3 +1,17 @@
+export interface Contact {
+  userId: string;
+  displayName: string;
+  email: string;
+  addedAt: number;
+}
+
+export interface ContactRequest {
+  fromUserId: string;
+  fromDisplayName: string;
+  fromEmail: string;
+  createdAt: number;
+}
+
 export interface PlainMessage {
   id: string;
   authorId: string;
@@ -18,7 +32,15 @@ export interface ChannelPost {
 export type SignalPayload =
   | { type: 'offer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
   | { type: 'answer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
-  | { type: 'ice'; candidate: RTCIceCandidateInit; connectionId?: string };
+  | { type: 'ice'; candidate: RTCIceCandidateInit; connectionId?: string }
+  | { type: 'call-offer'; callId: string; media: 'audio' | 'video' }
+  | { type: 'call-answer'; callId: string }
+  | { type: 'call-reject'; callId: string }
+  | { type: 'call-end'; callId: string }
+  | { type: 'dc-ready' }
+  | { type: 'dc-offer'; sdp: RTCSessionDescriptionInit }
+  | { type: 'dc-answer'; sdp: RTCSessionDescriptionInit }
+  | { type: 'dc-ice'; candidate: RTCIceCandidateInit };
 
 // Client -> Server
 export type ClientMessage =

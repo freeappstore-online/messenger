@@ -2,7 +2,8 @@
 // This must be imported before any other imports that might use the global object
 import './rtc/global-polyfill';
 
-// JSX requires React in scope
+import './index.css';
+
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
