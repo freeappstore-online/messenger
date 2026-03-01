@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, limitToLast } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { WsClient, ServerMessage } from '../services/wsClient';
 
@@ -16,23 +16,25 @@ export function useMessages(convId: string | undefined, wsClient: WsClient) {
   const [messages, setMessages] = useState<PlainMessage[]>([]);
   const seenIds = useRef(new Set<string>());
 
-  // Listen to Firestore for persistence
+  // Load messages once from Firestore (no real-time listener to avoid read amplification)
   useEffect(() => {
     if (!convId) return;
     seenIds.current.clear();
+    setMessages([]);
+
     const q = query(
       collection(db, `conversations/${convId}/messages`),
       orderBy('createdAt', 'asc'),
-      limit(200),
+      limitToLast(100),
     );
-    return onSnapshot(q, (snap) => {
+    getDocs(q).then((snap) => {
       const msgs = snap.docs.map(d => d.data() as PlainMessage);
       for (const m of msgs) seenIds.current.add(m.id);
       setMessages(msgs);
     });
   }, [convId]);
 
-  // Listen for real-time WS messages (optimistic delivery before Firestore sync)
+  // All new messages arrive via WS — no Firestore listener needed
   useEffect(() => {
     if (!convId) return;
     return wsClient.onMessage((msg: ServerMessage) => {
@@ -52,7 +54,7 @@ export function useMessages(convId: string | undefined, wsClient: WsClient) {
         seenIds.current.add(msg.id);
         setMessages(prev => [...prev, msg]);
       }
-      // Send via WS
+      // Send via WS — server persists to Firestore
       if (toUserId) {
         wsClient.send({ type: 'chat', to: toUserId, convId: msg.convId, message: msg });
       } else {

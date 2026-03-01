@@ -14,7 +14,7 @@ import { AppShell } from './components/AppShell';
 export const App = () => {
   const { user, loading, loginEmail, loginGoogle, logout } = useAuth();
   const wsClient = useWsClient(user);
-  const conversations = useConversations(user?.uid);
+  const conversations = useConversations(user?.uid, wsClient);
   const onlineUsers = usePresence(wsClient);
 
   if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
