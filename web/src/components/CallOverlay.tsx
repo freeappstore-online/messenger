@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CallInfo } from '../hooks/useCall';
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
 
 interface Props {
   call: CallInfo;
@@ -53,20 +54,26 @@ export function CallOverlay({ call, peerName, onAccept, onReject, onEnd, onToggl
       <div className="flex gap-4 px-6 pb-12 z-10">
         {call.state === 'ringing' ? (
           <>
-            <button onClick={onReject} className="px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-sm font-semibold min-w-[80px] transition-colors">Decline</button>
-            <button onClick={onAccept} className="px-6 py-3.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-sm font-semibold min-w-[80px] transition-colors">Accept</button>
+            <button onClick={onReject} className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors">
+              <PhoneOff size={24} />
+            </button>
+            <button onClick={onAccept} className="p-4 bg-green-600 hover:bg-green-700 text-white rounded-full transition-colors">
+              <Phone size={24} />
+            </button>
           </>
         ) : (
           <>
-            <button onClick={onToggleMute} className={`px-6 py-3.5 text-white rounded-full text-sm font-semibold min-w-[80px] transition-colors ${call.muted ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              {call.muted ? 'Unmute' : 'Mute'}
+            <button onClick={onToggleMute} className={`p-4 text-white rounded-full transition-colors ${call.muted ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              {call.muted ? <MicOff size={24} /> : <Mic size={24} />}
             </button>
             {isVideo && (
-              <button onClick={onToggleVideo} className={`px-6 py-3.5 text-white rounded-full text-sm font-semibold min-w-[80px] transition-colors ${call.videoOff ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                {call.videoOff ? 'Cam On' : 'Cam Off'}
+              <button onClick={onToggleVideo} className={`p-4 text-white rounded-full transition-colors ${call.videoOff ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                {call.videoOff ? <VideoOff size={24} /> : <Video size={24} />}
               </button>
             )}
-            <button onClick={onEnd} className="px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-sm font-semibold min-w-[80px] transition-colors">End</button>
+            <button onClick={onEnd} className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors">
+              <PhoneOff size={24} />
+            </button>
           </>
         )}
       </div>

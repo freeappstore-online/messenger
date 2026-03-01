@@ -1,4 +1,5 @@
 import type { Contact } from '@famchat/shared';
+import { Trash2 } from 'lucide-react';
 
 interface Props {
   contact: Contact;
@@ -22,9 +23,9 @@ export function ContactItem({ contact, online, onClick, onDelete }: Props) {
       </div>
       <button
         onClick={onDelete}
-        className="border border-red-500 text-red-500 rounded-lg px-3 py-1 text-xs hover:bg-red-500/10 transition-colors"
+        className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
       >
-        Remove
+        <Trash2 size={16} />
       </button>
     </div>
   );

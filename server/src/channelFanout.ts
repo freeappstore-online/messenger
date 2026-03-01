@@ -1,14 +1,54 @@
 import { getFirestore } from 'firebase-admin/firestore';
-import type { ChannelPost } from './types.js';
-import { sendTo, isOnline, getOnlineUsers } from './presence.js';
+import type { ChannelPost, SignalPayload } from './types.js';
+import { sendTo, isOnline } from './presence.js';
+import { sendPushToUser } from './pushNotify.js';
 
 const db = () => getFirestore();
+
+// Track P2P channel connections: Map<userId, Set<peerId>>
+const p2pPeers = new Map<string, Set<string>>();
+
+export function trackP2PSignal(fromUserId: string, toUserId: string, payload: SignalPayload) {
+  if (payload.type === 'dc-ready' && payload.connectionId?.startsWith('ch-')) {
+    // Mark both sides as P2P-connected for channel sync
+    if (!p2pPeers.has(fromUserId)) p2pPeers.set(fromUserId, new Set());
+    p2pPeers.get(fromUserId)!.add(toUserId);
+    if (!p2pPeers.has(toUserId)) p2pPeers.set(toUserId, new Set());
+    p2pPeers.get(toUserId)!.add(fromUserId);
+  }
+}
+
+export function removeP2PTracking(userId: string) {
+  const peers = p2pPeers.get(userId);
+  if (peers) {
+    for (const peerId of peers) {
+      p2pPeers.get(peerId)?.delete(userId);
+    }
+    p2pPeers.delete(userId);
+  }
+}
 
 export async function handleChannelPost(
   fromUserId: string,
   channelId: string,
   post: ChannelPost
 ) {
+  // Validate body size
+  if (typeof post.body !== 'string' || post.body.length > 10_000) {
+    console.warn(`[channel] rejected: body too large from ${fromUserId}`);
+    return;
+  }
+
+  // Enforce authorId
+  post.authorId = fromUserId;
+
+  // Verify sender is the channel owner
+  const channelDoc = await db().doc(`channels/${channelId}`).get();
+  if (!channelDoc.exists || channelDoc.data()?.ownerId !== fromUserId) {
+    console.warn(`[channel] rejected: ${fromUserId} is not owner of ${channelId}`);
+    return;
+  }
+
   // Persist post
   await db().doc(`channels/${channelId}/posts/${post.id}`).set(post);
   await db().doc(`channels/${channelId}`).update({
@@ -22,11 +62,24 @@ export async function handleChannelPost(
 
   // Find online subscribers
   const onlineSubs = subscribers.filter(id => isOnline(id));
-  const offlineSubs = subscribers.filter(id => !isOnline(id));
 
-  // Pick seeds (up to 5 online subscribers)
-  const seeds = onlineSubs.slice(0, 5);
-  const nonSeeds = onlineSubs.slice(5);
+  // Determine which subscribers are P2P-connected to the author
+  const authorPeers = p2pPeers.get(fromUserId) ?? new Set<string>();
+
+  // Subscribers covered by P2P (they'll get the post directly from the author)
+  const p2pCovered = new Set<string>();
+  for (const sub of onlineSubs) {
+    if (authorPeers.has(sub)) {
+      p2pCovered.add(sub);
+    }
+  }
+
+  // Send via WS only to uncovered subscribers
+  const uncovered = onlineSubs.filter(id => !p2pCovered.has(id));
+
+  // Pick seeds (up to 5 online uncovered subscribers)
+  const seeds = uncovered.slice(0, 5);
+  const nonSeeds = uncovered.slice(5);
 
   if (seeds.length > 0 && nonSeeds.length > 0) {
     // Distribute targets among seeds
@@ -41,12 +94,23 @@ export async function handleChannelPost(
       }
     }
   } else {
-    // No relay needed, just send directly to all online
-    for (const sub of onlineSubs) {
+    // No relay needed, just send directly to all uncovered online
+    for (const sub of uncovered) {
       sendTo(sub, { type: 'channel_post', channelId, post });
     }
   }
-  // Offline subscribers will sync when they reconnect
+  // Push notifications to offline subscribers
+  const offlineSubs = subscribers.filter(id => !isOnline(id));
+  if (offlineSubs.length > 0) {
+    const preview = post.body.length > 100 ? post.body.slice(0, 100) + '...' : post.body;
+    const channelName = channelDoc.data()?.name || 'channel';
+    for (const sub of offlineSubs) {
+      sendPushToUser(sub, `New post in ${channelName}`, `${post.authorName}: ${preview}`, {
+        url: `/channel/${channelId}`,
+        tag: `channel-${channelId}`,
+      }).catch(err => console.error('[push] channel push failed:', err));
+    }
+  }
 }
 
 export function handleRelayReport(

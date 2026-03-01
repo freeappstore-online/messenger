@@ -20,29 +20,6 @@ export async function ensureUser(userId: string, displayName: string, email: str
 const membersCache = new Map<string, { members: string[]; expiresAt: number }>();
 const MEMBERS_TTL = 60_000; // 1 minute
 
-export async function getOrCreateConversation(
-  members: string[],
-  type: '1:1' | 'group',
-  name: string | null = null
-): Promise<string> {
-  if (type === '1:1') {
-    const sorted = [...members].sort();
-    const convId = sorted.join(':');
-    const ref = db().doc(`conversations/${convId}`);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      await ref.set({ type, members: sorted, name, lastMessage: null, lastMessageAt: null, updatedAt: Date.now() });
-    }
-    membersCache.set(convId, { members: sorted, expiresAt: Date.now() + MEMBERS_TTL });
-    return convId;
-  }
-  const ref = await db().collection('conversations').add({
-    type, members, name, lastMessage: null, lastMessageAt: null, updatedAt: Date.now()
-  });
-  membersCache.set(ref.id, { members, expiresAt: Date.now() + MEMBERS_TTL });
-  return ref.id;
-}
-
 export async function saveMessage(msg: PlainMessage) {
   // Batch the message write + conversation metadata update into one round trip
   const batch = db().batch();

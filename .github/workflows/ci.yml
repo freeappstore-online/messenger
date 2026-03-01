@@ -24,6 +24,9 @@ jobs:
       - name: Type check all packages
         run: pnpm -r run type:check
 
+      - name: Server tests with coverage
+        run: pnpm --filter server test:coverage
+
       - name: Build web
         run: pnpm --filter web build
 

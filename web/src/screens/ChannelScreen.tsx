@@ -3,21 +3,30 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useChannelPosts } from '../hooks/useChannelPosts';
 import { MessageBubble } from '../components/MessageBubble';
 import { Composer } from '../components/Composer';
-import type { ChannelPost } from '@famchat/shared';
+import { generatePostId, type ChannelPost, type P2PMessage } from '@famchat/shared';
 import type { Channel } from '../hooks/useChannels';
 import type { WsClient } from '../services/wsClient';
+import { ArrowLeft } from 'lucide-react';
+
+interface P2PFunctions {
+  broadcastP2P: (msg: P2PMessage) => void;
+  sendToPeer: (peerId: string, msg: P2PMessage) => void;
+  onP2PMessage: (handler: (peerId: string, msg: P2PMessage) => void) => () => void;
+  connectedPeerIds: string[];
+}
 
 interface Props {
   currentUserId: string;
   currentUserName: string;
   wsClient: WsClient;
   channels: Channel[];
+  p2p?: P2PFunctions;
 }
 
-export function ChannelScreen({ currentUserId, currentUserName, wsClient, channels }: Props) {
+export function ChannelScreen({ currentUserId, currentUserName, wsClient, channels, p2p }: Props) {
   const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
-  const { posts, sendPost } = useChannelPosts(channelId, wsClient);
+  const { posts, sendPost } = useChannelPosts(channelId, wsClient, p2p);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const channel = channels.find(c => c.id === channelId);
@@ -31,7 +40,7 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
 
   const handleSend = (text: string) => {
     const post: ChannelPost = {
-      id: crypto.randomUUID(),
+      id: generatePostId(currentUserId),
       authorId: currentUserId,
       authorName: currentUserName,
       body: text,
@@ -43,7 +52,9 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900">
-        <button onClick={() => navigate('/channels')} className="text-emerald-400 text-sm font-medium">Back</button>
+        <button onClick={() => navigate('/channels')} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
+          <ArrowLeft size={20} />
+        </button>
         <span className="font-semibold text-gray-100">{channel?.name ?? 'Channel'}</span>
       </div>
       <div className="flex-1 overflow-auto px-4 py-3">

@@ -4,6 +4,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Contact, ContactRequest } from '@famchat/shared';
 import { ContactItem } from '../components/ContactItem';
+import { UserPlus, Check, X } from 'lucide-react';
 
 interface Props {
   currentUserId: string;
@@ -68,9 +69,9 @@ export function ContactsScreen({ currentUserId, contacts, requests, onlineUsers,
           <button
             onClick={handleAdd}
             disabled={adding}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
           >
-            {adding ? '...' : 'Add'}
+            <UserPlus size={20} />
           </button>
         </div>
         {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
@@ -88,15 +89,15 @@ export function ContactsScreen({ currentUserId, contacts, requests, onlineUsers,
               </div>
               <button
                 onClick={() => acceptRequest(r)}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors"
+                className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
               >
-                Accept
+                <Check size={16} />
               </button>
               <button
                 onClick={() => declineRequest(r.fromUserId)}
-                className="px-3.5 py-1.5 border border-red-500 text-red-500 rounded-lg text-xs font-medium hover:bg-red-500/10 transition-colors"
+                className="p-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-500/10 transition-colors"
               >
-                Decline
+                <X size={16} />
               </button>
             </div>
           ))}

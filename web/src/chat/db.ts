@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { ChannelPost } from '@famchat/shared';
 
 export interface MessageRecord {
   id: string;
@@ -9,8 +10,13 @@ export interface MessageRecord {
   createdAt: number;
 }
 
+export interface ChannelPostRecord extends ChannelPost {
+  channelId: string;
+}
+
 class ChatDB extends Dexie {
   messages!: Table<MessageRecord, string>;
+  channelPosts!: Table<ChannelPostRecord, string>;
 
   constructor() {
     super('family_chat_v1');
@@ -20,7 +26,33 @@ class ChatDB extends Dexie {
     this.version(2).stores({
       messages: '&id, convId, createdAt'
     });
+    this.version(3).stores({
+      messages: '&id, convId, createdAt',
+      channelPosts: '&id, channelId, createdAt',
+    });
   }
 }
 
 export const chatDB = new ChatDB();
+
+export async function getChannelPosts(
+  channelId: string,
+  sinceTimestamp?: number,
+  limit = 100,
+): Promise<ChannelPost[]> {
+  let q = chatDB.channelPosts.where('channelId').equals(channelId);
+  if (sinceTimestamp) {
+    q = q.and(p => p.createdAt > sinceTimestamp);
+  }
+  const records = await q.sortBy('createdAt');
+  return records.slice(-limit).map(({ channelId: _, ...post }) => post);
+}
+
+export async function putChannelPost(channelId: string, post: ChannelPost): Promise<void> {
+  await chatDB.channelPosts.put({ ...post, channelId });
+}
+
+export async function putChannelPosts(channelId: string, posts: ChannelPost[]): Promise<void> {
+  if (posts.length === 0) return;
+  await chatDB.channelPosts.bulkPut(posts.map(p => ({ ...p, channelId })));
+}

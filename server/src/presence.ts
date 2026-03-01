@@ -1,29 +1,22 @@
 import type { WebSocket } from 'ws';
 import type { ServerMessage } from './types.js';
+import { getUserContacts } from './contacts.js';
 
 // userId -> WebSocket
 const online = new Map<string, WebSocket>();
 
 export function addUser(userId: string, ws: WebSocket) {
   online.set(userId, ws);
-  broadcast({ type: 'presence', userId, online: true }, userId);
+  notifyContacts(userId, true);
 }
 
 export function removeUser(userId: string) {
   online.delete(userId);
-  broadcast({ type: 'presence', userId, online: false });
-}
-
-export function getSocket(userId: string): WebSocket | undefined {
-  return online.get(userId);
+  notifyContacts(userId, false);
 }
 
 export function isOnline(userId: string): boolean {
   return online.has(userId);
-}
-
-export function getOnlineUsers(): string[] {
-  return [...online.keys()];
 }
 
 export function sendTo(userId: string, msg: ServerMessage): boolean {
@@ -35,11 +28,15 @@ export function sendTo(userId: string, msg: ServerMessage): boolean {
   return false;
 }
 
-function broadcast(msg: ServerMessage, excludeUserId?: string) {
-  const data = JSON.stringify(msg);
-  for (const [uid, ws] of online) {
-    if (uid !== excludeUserId && ws.readyState === ws.OPEN) {
-      ws.send(data);
+// Only notify contacts of presence changes (not all users)
+async function notifyContacts(userId: string, isOnlineNow: boolean) {
+  try {
+    const contacts = await getUserContacts(userId);
+    const msg: ServerMessage = { type: 'presence', userId, online: isOnlineNow };
+    for (const contactId of contacts) {
+      sendTo(contactId, msg);
     }
+  } catch (err) {
+    console.error(`[presence] Failed to notify contacts of ${userId}:`, err);
   }
 }

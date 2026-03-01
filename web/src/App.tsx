@@ -7,7 +7,11 @@ import { usePresence } from './hooks/usePresence';
 import { useContacts } from './hooks/useContacts';
 import { useUserNames } from './hooks/useUserNames';
 import { useCall } from './hooks/useCall';
+import { useChannelPeers } from './hooks/useChannelPeers';
+import { useContactChannels } from './hooks/useContactChannels';
+import { useNotifications } from './hooks/useNotifications';
 import { chatDB } from './chat/db';
+import { registerServiceWorker } from './utils/pwa';
 import { LoginScreen } from './screens/LoginScreen';
 import { ConversationList } from './screens/ConversationList';
 import { ChatScreen } from './screens/ChatScreen';
@@ -27,6 +31,26 @@ export const App = () => {
   const { contacts, requests, addContact, acceptRequest, declineRequest, removeContact } = useContacts(user?.uid);
   const { call, startCall, acceptCall, rejectCall, endCall, toggleMute, toggleVideo } = useCall(user?.uid, wsClient);
   const { channels, subscriptions, createChannel, subscribe, unsubscribe } = useChannels(user?.uid);
+  const { contactsByChannel } = useContactChannels(user?.uid, contacts, subscriptions);
+  useNotifications(user?.uid);
+
+  // Register service worker once
+  useEffect(() => { registerServiceWorker(); }, []);
+
+  // Compute P2P peer IDs: online contacts with shared channel subscriptions
+  const channelPeerIds = useMemo(() => {
+    const peerSet = new Set<string>();
+    for (const [channelId, contactIds] of contactsByChannel) {
+      if (subscriptions.has(channelId)) {
+        for (const cid of contactIds) {
+          if (onlineUsers.has(cid)) peerSet.add(cid);
+        }
+      }
+    }
+    return [...peerSet];
+  }, [contactsByChannel, subscriptions, onlineUsers]);
+
+  const p2p = useChannelPeers(user?.uid, wsClient, channelPeerIds);
 
   // Global WS sink: persist all incoming chat messages to Dexie
   // so messages arriving while viewing a different screen aren't lost
@@ -118,6 +142,7 @@ export const App = () => {
               onCreate={createChannel}
               onSubscribe={subscribe}
               onUnsubscribe={unsubscribe}
+              contactsByChannel={contactsByChannel}
             />
           } />
           <Route path="/channel/:channelId" element={
@@ -126,6 +151,7 @@ export const App = () => {
               currentUserName={currentUserName}
               wsClient={wsClient}
               channels={channels}
+              p2p={p2p}
             />
           } />
           <Route path="/settings" element={<SettingsScreen user={user} logout={logout} deleteAccount={deleteAccount} />} />

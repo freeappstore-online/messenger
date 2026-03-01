@@ -1,3 +1,17 @@
+// Smart post IDs: {timestamp}-{authorShort8}-{random6}
+export function generatePostId(authorId: string): string {
+  const ts = Date.now().toString();
+  const author = authorId.slice(0, 8);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${ts}-${author}-${rand}`;
+}
+
+// P2P channel sync messages (sent over data channels)
+export type P2PMessage =
+  | { type: 'p2p-channel-post'; channelId: string; post: ChannelPost }
+  | { type: 'p2p-channel-sync-request'; channelId: string; sinceTimestamp?: number }
+  | { type: 'p2p-channel-sync-response'; channelId: string; posts: ChannelPost[] };
+
 export interface Contact {
   userId: string;
   displayName: string;
@@ -37,10 +51,10 @@ export type SignalPayload =
   | { type: 'call-answer'; callId: string }
   | { type: 'call-reject'; callId: string }
   | { type: 'call-end'; callId: string }
-  | { type: 'dc-ready' }
-  | { type: 'dc-offer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'dc-answer'; sdp: RTCSessionDescriptionInit }
-  | { type: 'dc-ice'; candidate: RTCIceCandidateInit };
+  | { type: 'dc-ready'; connectionId?: string }
+  | { type: 'dc-offer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
+  | { type: 'dc-answer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
+  | { type: 'dc-ice'; candidate: RTCIceCandidateInit; connectionId?: string };
 
 // Client -> Server
 export type ClientMessage =

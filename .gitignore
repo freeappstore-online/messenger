@@ -32,3 +32,4 @@ screenshots/
 
 # pnpm
 pnpm-debug.log*
+server/coverage/

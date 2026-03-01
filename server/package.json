@@ -7,7 +7,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "type:check": "tsc --noEmit"
+    "type:check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@famchat/shared": "workspace:*",
@@ -16,7 +18,9 @@
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.19.0",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "vitest": "^4.0.18"
   }
 }

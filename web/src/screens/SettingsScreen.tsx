@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { updateProfile, type User } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { Save, LogOut, Trash2, Bell } from 'lucide-react';
+import { requestNotificationPermission, hasNotificationPermission, canRequestNotificationPermission } from '../utils/pwa';
+import { requestFCMToken, saveFCMToken } from '../services/fcm';
 
 interface Props {
   user: User;
@@ -15,6 +18,16 @@ export function SettingsScreen({ user, logout, deleteAccount }: Props) {
   const [saved, setSaved] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
+  const [notifGranted, setNotifGranted] = useState(hasNotificationPermission);
+
+  const handleEnableNotifications = async () => {
+    const permission = await requestNotificationPermission();
+    setNotifGranted(permission === 'granted');
+    if (permission === 'granted') {
+      const token = await requestFCMToken();
+      if (token) await saveFCMToken(user.uid, token);
+    }
+  };
 
   const handleSaveName = async () => {
     if (!name.trim() || name.trim() === user.displayName) return;
@@ -64,22 +77,41 @@ export function SettingsScreen({ user, logout, deleteAccount }: Props) {
           <button
             onClick={handleSaveName}
             disabled={saving}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:bg-gray-600"
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:bg-gray-600"
           >
+            <Save size={16} />
             {saving ? '...' : 'Save'}
           </button>
         </div>
         {saved && <p className="text-green-400 text-xs mt-1">Saved!</p>}
       </div>
-      <button onClick={logout} className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-400 mb-1.5">Notifications</label>
+        {notifGranted ? (
+          <p className="text-sm text-green-400">Notifications enabled</p>
+        ) : canRequestNotificationPermission() ? (
+          <button
+            onClick={handleEnableNotifications}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Bell size={16} />
+            Enable Notifications
+          </button>
+        ) : (
+          <p className="text-sm text-gray-500">Notifications blocked by browser</p>
+        )}
+      </div>
+      <button onClick={logout} className="flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">
+        <LogOut size={16} />
         Sign Out
       </button>
       <div className="mt-12">
         {!confirming ? (
           <button
             onClick={() => setConfirming(true)}
-            className="px-6 py-2.5 border border-red-500 text-red-500 rounded-lg text-sm font-medium hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 border border-red-500 text-red-500 rounded-lg text-sm font-medium hover:bg-red-500/10 transition-colors"
           >
+            <Trash2 size={16} />
             Delete Account
           </button>
         ) : (

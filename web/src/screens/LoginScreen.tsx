@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { useAuth } from '../hooks/useAuth';
+import { LogIn } from 'lucide-react';
 
 type AuthAPI = ReturnType<typeof useAuth>;
 
@@ -37,7 +38,8 @@ export function LoginScreen({ loginEmail, loginGoogle }: Pick<AuthAPI, 'loginEma
           className="block w-full px-3 py-2.5 mb-3 border border-gray-700 rounded-lg bg-gray-800 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-        <button type="submit" className="block w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors">
+        <button type="submit" className="flex items-center justify-center gap-2 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors">
+          <LogIn size={16} />
           Sign In
         </button>
       </form>
@@ -48,9 +50,6 @@ export function LoginScreen({ loginEmail, loginGoogle }: Pick<AuthAPI, 'loginEma
       >
         Sign in with Google
       </button>
-      <p className="mt-4 text-xs text-gray-500">
-        Test: test1@user.com / test123 or test2@user.com / test123
-      </p>
     </div>
   );
 }

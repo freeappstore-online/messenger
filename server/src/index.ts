@@ -35,7 +35,7 @@ const server = createServer((req, res) => {
   res.end();
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
 server.on('upgrade', async (req, socket, head) => {
   console.log('[upgrade] incoming WS upgrade request');

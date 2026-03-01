@@ -17,6 +17,14 @@ service cloud.firestore {
                     && request.auth.uid == userId
                     && request.resource.data.diff(resource.data).affectedKeys()
                        .hasOnly(['displayName', 'photoURL']);
+
+      // FCM push notification tokens — owner only, validated fields
+      match /fcmTokens/{tokenId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+                              && request.auth.uid == userId
+                              && request.resource.data.keys().hasOnly(['token', 'createdAt', 'userAgent']);
+      }
     }
 
     // Conversations

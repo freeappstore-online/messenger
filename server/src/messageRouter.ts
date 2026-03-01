@@ -1,6 +1,12 @@
 import type { ClientMessage, ServerMessage } from './types.js';
 import { sendTo } from './presence.js';
 import { saveMessage, getConversationMembers, getMessagesSince, getUserConversations } from './firestore.js';
+import { trackP2PSignal } from './channelFanout.js';
+import { sendPushToUser } from './pushNotify.js';
+import { isContact } from './contacts.js';
+
+const MAX_BODY_LENGTH = 10_000;
+const MAX_SYNC_MESSAGES = 1000;
 
 export async function routeMessage(fromUserId: string, msg: ClientMessage) {
   switch (msg.type) {
@@ -19,8 +25,23 @@ async function handleChat(
   fromUserId: string,
   msg: Extract<ClientMessage, { type: 'chat' }>
 ) {
+  // Validate body size
+  if (typeof msg.message.body !== 'string' || msg.message.body.length > MAX_BODY_LENGTH) {
+    console.warn(`[chat] rejected: body too large from ${fromUserId}`);
+    return;
+  }
+
+  // Enforce authorId — prevent impersonation
+  msg.message.authorId = fromUserId;
+
+  // Verify sender and recipient are members of the conversation
+  const members = await getConversationMembers(msg.convId);
+  if (!members.includes(fromUserId) || !members.includes(msg.to)) {
+    console.warn(`[chat] rejected: ${fromUserId} or ${msg.to} not member of ${msg.convId}`);
+    return;
+  }
+
   console.log(`[chat] ${fromUserId} -> ${msg.to} (${msg.convId}) msgId=${msg.message.id}`);
-  // Persist
   await saveMessage(msg.message);
 
   // Deliver to recipient
@@ -32,6 +53,15 @@ async function handleChat(
   });
   console.log(`[chat] delivered=${delivered} to=${msg.to}`);
 
+  // Push notification if not delivered via WS
+  if (!delivered) {
+    const preview = msg.message.body.length > 100 ? msg.message.body.slice(0, 100) + '...' : msg.message.body;
+    sendPushToUser(msg.to, 'New message', `${msg.message.authorName}: ${preview}`, {
+      url: `/chat/${msg.convId}`,
+      tag: `chat-${msg.convId}`,
+    }).catch(err => console.error('[push] chat push failed:', err));
+  }
+
   // Ack to sender
   sendTo(fromUserId, { type: 'ack', messageId: msg.message.id });
 }
@@ -40,19 +70,39 @@ async function handleGroupChat(
   fromUserId: string,
   msg: Extract<ClientMessage, { type: 'chat_group' }>
 ) {
-  // Persist
+  // Validate body size
+  if (typeof msg.message.body !== 'string' || msg.message.body.length > MAX_BODY_LENGTH) {
+    console.warn(`[chat_group] rejected: body too large from ${fromUserId}`);
+    return;
+  }
+
+  // Enforce authorId
+  msg.message.authorId = fromUserId;
+
+  // Verify sender is a member
+  const members = await getConversationMembers(msg.convId);
+  if (!members.includes(fromUserId)) {
+    console.warn(`[chat_group] rejected: ${fromUserId} not member of ${msg.convId}`);
+    return;
+  }
+
   await saveMessage(msg.message);
 
-  // Fan out to all members except sender
-  const members = await getConversationMembers(msg.convId);
+  const preview = msg.message.body.length > 100 ? msg.message.body.slice(0, 100) + '...' : msg.message.body;
   for (const memberId of members) {
     if (memberId !== fromUserId) {
-      sendTo(memberId, {
+      const delivered = sendTo(memberId, {
         type: 'chat',
         from: fromUserId,
         convId: msg.convId,
         message: msg.message,
       });
+      if (!delivered) {
+        sendPushToUser(memberId, 'New message', `${msg.message.authorName}: ${preview}`, {
+          url: `/chat/${msg.convId}`,
+          tag: `chat-${msg.convId}`,
+        }).catch(err => console.error('[push] group push failed:', err));
+      }
     }
   }
 
@@ -60,10 +110,18 @@ async function handleGroupChat(
   sendTo(fromUserId, { type: 'ack', messageId: msg.message.id });
 }
 
-function handleSignal(
+async function handleSignal(
   fromUserId: string,
   msg: Extract<ClientMessage, { type: 'signal' }>
 ) {
+  // Only allow signaling to contacts
+  if (!await isContact(fromUserId, msg.to)) {
+    console.warn(`[signal] rejected: ${fromUserId} -> ${msg.to} (not contacts)`);
+    return;
+  }
+
+  trackP2PSignal(fromUserId, msg.to, msg.payload);
+
   const delivered = sendTo(msg.to, {
     type: 'signal',
     from: fromUserId,
@@ -81,7 +139,8 @@ async function handleSync(
   for (const convId of convIds) {
     const msgs = await getMessagesSince(convId, msg.since);
     allMessages.push(...msgs);
+    if (allMessages.length >= MAX_SYNC_MESSAGES) break;
   }
   allMessages.sort((a, b) => a.createdAt - b.createdAt);
-  sendTo(fromUserId, { type: 'sync', messages: allMessages });
+  sendTo(fromUserId, { type: 'sync', messages: allMessages.slice(0, MAX_SYNC_MESSAGES) });
 }

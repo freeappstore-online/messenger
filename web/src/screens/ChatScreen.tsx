@@ -6,6 +6,7 @@ import { useUserNames } from '../hooks/useUserNames';
 import { MessageBubble } from '../components/MessageBubble';
 import { Composer } from '../components/Composer';
 import type { WsClient } from '../services/wsClient';
+import { ArrowLeft, Phone, Video } from 'lucide-react';
 
 interface Props {
   currentUserId: string;
@@ -57,7 +58,9 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900">
-        <button onClick={() => navigate('/')} className="text-emerald-400 text-sm font-medium">Back</button>
+        <button onClick={() => navigate('/')} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
+          <ArrowLeft size={20} />
+        </button>
         <div className="flex items-center gap-2 flex-1">
           {toUserId && (
             <span className="relative flex h-2 w-2">
@@ -68,9 +71,13 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
           <span className="font-semibold text-gray-100">{peerName}</span>
         </div>
         {toUserId && onStartCall && (
-          <div className="flex gap-2">
-            <button onClick={() => onStartCall(toUserId, 'audio')} className="text-emerald-400 text-sm font-semibold">Call</button>
-            <button onClick={() => onStartCall(toUserId, 'video')} className="text-emerald-400 text-sm font-semibold">Video</button>
+          <div className="flex gap-1">
+            <button onClick={() => onStartCall(toUserId, 'audio')} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
+              <Phone size={20} />
+            </button>
+            <button onClick={() => onStartCall(toUserId, 'video')} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
+              <Video size={20} />
+            </button>
           </div>
         )}
       </div>

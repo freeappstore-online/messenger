@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import type { Conversation } from '../hooks/useConversations';
 import { ConversationItem } from '../components/ConversationItem';
+import { SquarePen } from 'lucide-react';
 
 interface Props {
   conversations: Conversation[];
@@ -18,9 +19,9 @@ export function ConversationList({ conversations, currentUserId, onlineUsers, us
         <h2 className="text-lg font-bold text-gray-100">Chats</h2>
         <button
           onClick={() => navigate('/contacts')}
-          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-medium transition-colors"
+          className="p-2 text-emerald-400 transition-colors hover:text-emerald-300"
         >
-          + New Chat
+          <SquarePen size={20} />
         </button>
       </div>
       {conversations.length === 0 && (

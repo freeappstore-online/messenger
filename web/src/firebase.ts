@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getMessaging, isSupported, type Messaging } from 'firebase/messaging';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -16,3 +17,17 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
+
+// Firebase Cloud Messaging (lazy init, only in supported environments)
+let messaging: Messaging | null = null;
+
+export const getFirebaseMessaging = async (): Promise<Messaging | null> => {
+  if (messaging) return messaging;
+  try {
+    const supported = await isSupported();
+    if (supported) messaging = getMessaging(app);
+  } catch (error) {
+    console.warn('[Firebase] Messaging not available:', error);
+  }
+  return messaging;
+};
