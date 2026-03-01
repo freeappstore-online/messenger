@@ -7,42 +7,25 @@ on:
     branches: [main]
 
 jobs:
-  frontend:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - name: Type check
-        run: npx tsc -b --noEmit
-
-      - name: Build
-        run: npx vite build
-
-  server:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Type check all packages
+        run: pnpm -r run type:check
 
-      - name: Build
-        run: npm run build
+      - name: Build web
+        run: pnpm --filter web build
+
+      - name: Build server
+        run: pnpm --filter server build

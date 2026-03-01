@@ -2,15 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, orderBy, getDocs, limitToLast } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { WsClient, ServerMessage } from '../services/wsClient';
+import type { PlainMessage } from '@famchat/shared';
 
-export interface PlainMessage {
-  id: string;
-  authorId: string;
-  authorName: string;
-  convId: string;
-  body: string;
-  createdAt: number;
-}
+export type { PlainMessage } from '@famchat/shared';
 
 export function useMessages(convId: string | undefined, wsClient: WsClient) {
   const [messages, setMessages] = useState<PlainMessage[]>([]);

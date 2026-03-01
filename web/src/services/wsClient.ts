@@ -1,23 +1,7 @@
 import type { User } from 'firebase/auth';
+import type { ServerMessage } from '@famchat/shared';
 
-export type ServerMessage =
-  | { type: 'chat'; from: string; convId: string; message: PlainMsg }
-  | { type: 'signal'; from: string; payload: unknown }
-  | { type: 'presence'; userId: string; online: boolean }
-  | { type: 'sync'; messages: PlainMsg[] }
-  | { type: 'channel_post'; channelId: string; post: unknown }
-  | { type: 'channel_relay_request'; channelId: string; post: unknown; targets: string[] }
-  | { type: 'ack'; messageId: string };
-
-interface PlainMsg {
-  id: string;
-  authorId: string;
-  authorName: string;
-  convId: string;
-  body: string;
-  createdAt: number;
-}
-
+export type { ServerMessage } from '@famchat/shared';
 export type MessageHandler = (msg: ServerMessage) => void;
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
