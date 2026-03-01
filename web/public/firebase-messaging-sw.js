@@ -30,7 +30,7 @@ if (hasPushManager && hasNotification) {
       const title = payload.notification?.title || 'FamChat';
       const options = {
         body: payload.notification?.body || 'New message',
-        icon: '/vite.svg',
+        icon: '/favicon-192.png',
         tag: payload.data?.tag || 'famchat-fcm',
         data: {
           url: payload.data?.url || '/',
@@ -49,7 +49,7 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'FamChat',
     body: 'New notification',
-    icon: '/vite.svg',
+    icon: '/favicon-192.png',
     tag: 'famchat-notification',
     data: { url: '/' },
   };

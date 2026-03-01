@@ -20,7 +20,7 @@ export async function sendPushToUser(
     data: data || {},
     webpush: {
       fcmOptions: { link: data?.url || '/' },
-      notification: { icon: '/vite.svg' },
+      notification: { icon: '/favicon-192.png' },
     },
   };
 

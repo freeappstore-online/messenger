@@ -31,7 +31,7 @@ export function useNotifications(userId: string | undefined) {
           const body = payload.notification?.body || 'New message';
           if (document.hidden) return;
           if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, { body, icon: '/vite.svg' });
+            new Notification(title, { body, icon: '/favicon-192.png' });
           }
         });
       } catch (error) {
