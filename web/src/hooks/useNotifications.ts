@@ -3,12 +3,26 @@ import { hasNotificationPermission } from '../utils/pwa';
 import { requestFCMToken, saveFCMToken, setupForegroundMessageHandler } from '../services/fcm';
 import type { ContactSettings } from './useContactSettings';
 
-function getPeerIdFromChatUrl(url: string | undefined, currentUserId: string): string | undefined {
+export function getPeerIdFromChatUrl(url: string | undefined, currentUserId: string): string | undefined {
   if (!url || !url.startsWith('/chat/')) return undefined;
   const convId = url.slice('/chat/'.length).split('?')[0];
   const parts = convId.split(':');
   if (parts.length !== 2) return undefined;
   return parts.find((part) => part !== currentUserId);
+}
+
+export function resolveNotificationSenderId(
+  data: Record<string, string> | undefined,
+  currentUserId: string,
+): string | undefined {
+  return data?.senderId ?? getPeerIdFromChatUrl(data?.url, currentUserId);
+}
+
+export function shouldMuteInAppNotification(
+  senderId: string | undefined,
+  settingsByUser: Map<string, ContactSettings>,
+): boolean {
+  return !!senderId && !!settingsByUser.get(senderId)?.muteInApp;
 }
 
 export function useNotifications(
@@ -57,8 +71,8 @@ export function useNotifications(
     const setupHandler = async () => {
       try {
         unsubMessage = await setupForegroundMessageHandler((payload) => {
-          const senderId = payload.data?.senderId ?? getPeerIdFromChatUrl(payload.data?.url, userId);
-          if (senderId && settingsRef.current.get(senderId)?.muteInApp) return;
+          const senderId = resolveNotificationSenderId(payload.data, userId);
+          if (shouldMuteInAppNotification(senderId, settingsRef.current)) return;
           const title = payload.notification?.title || 'FamChat';
           const body = payload.notification?.body || 'New message';
           if (document.hidden) return;

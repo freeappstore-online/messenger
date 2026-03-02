@@ -180,3 +180,11 @@ export async function decryptFromPeer(peerId: string, payload: EncryptedPayload)
     return null;
   }
 }
+
+export function __resetE2EETestState(): void {
+  identityPromise = null;
+  peerJwkLoaded = false;
+  peerJwkById.clear();
+  peerPublicKeyById.clear();
+  sharedKeyById.clear();
+}
