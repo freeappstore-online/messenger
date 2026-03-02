@@ -5,7 +5,7 @@ import { usePeerChannel } from '../hooks/usePeerChannel';
 import { useUserNames } from '../hooks/useUserNames';
 import { MessageBubble } from '../components/MessageBubble';
 import { Composer } from '../components/Composer';
-import { queuePendingDirectMessage } from '../chat/db';
+import { getPendingDirectMessagesForPeer, queuePendingDirectMessage } from '../chat/db';
 import type { WsClient } from '../services/wsClient';
 import type { ContactSettings } from '../hooks/useContactSettings';
 import { ArrowLeft, Phone, Settings2, Video } from 'lucide-react';
@@ -40,6 +40,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
   const toUserId = parts.length === 2 ? parts.find(p => p !== currentUserId) : undefined;
 
   const peerChannel = usePeerChannel(toUserId, currentUserId, wsClient, receiveMessage);
+  const [pendingDirectIds, setPendingDirectIds] = useState<Set<string>>(new Set());
 
   // Typing indicator
   const [isTyping, setIsTyping] = useState(false);
@@ -74,6 +75,27 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!toUserId) {
+      setPendingDirectIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      const pending = await getPendingDirectMessagesForPeer(toUserId);
+      if (cancelled) return;
+      setPendingDirectIds(new Set(pending.map((item) => item.id)));
+    };
+    refresh().catch((err) => console.error('[Chat] refresh pending direct failed', err));
+    const timer = window.setInterval(() => {
+      refresh().catch((err) => console.error('[Chat] refresh pending direct failed', err));
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [toUserId, peerChannel.isOpen, messages.length]);
 
   if (!convId) return null;
 
@@ -172,8 +194,26 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
           </div>
         )}
       </div>
+      <div className="px-4 py-1 text-[11px] text-gray-500 border-b border-gray-800 bg-gray-900/70 flex items-center justify-between">
+        <span>Sync: {peerChannel.isOpen ? 'P2P connected' : 'Waiting for peer'} • Pending {pendingDirectIds.size}</span>
+        {pendingDirectIds.size > 0 && (
+          <button
+            type="button"
+            onClick={() => peerChannel.retryPending().catch((err) => console.error('[Chat] retry pending failed', err))}
+            className="text-emerald-400 hover:text-emerald-300"
+          >
+            Retry
+          </button>
+        )}
+      </div>
       <div className="flex-1 overflow-auto px-4 py-3">
-        {messages.map(m => (
+        {messages.map((m) => {
+          const isPending = m.authorId === currentUserId && pendingDirectIds.has(m.id);
+          const hasAttachment = !!m.attachments && m.attachments.length > 0;
+          const statusLabel = !hasAttachment || m.authorId !== currentUserId
+            ? undefined
+            : (isPending ? 'Pending' : 'Sent');
+          return (
           <MessageBubble
             key={m.id}
             body={m.body}
@@ -184,8 +224,11 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
             isMine={m.authorId === currentUserId}
             time={m.createdAt}
             onReact={m.authorId === currentUserId ? undefined : (emoji) => reactToMessage(m.id, emoji)}
+            statusLabel={statusLabel}
+            onStatusClick={isPending ? () => peerChannel.retryPending().catch((err) => console.error('[Chat] retry pending failed', err)) : undefined}
           />
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
       {isTyping && (

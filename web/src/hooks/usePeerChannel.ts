@@ -289,24 +289,29 @@ export function usePeerChannel(
     return true;
   }, [sendPacket]);
 
+  const flushPendingDirect = useCallback(async () => {
+    if (!peerId) return;
+    const pending = await getPendingDirectMessagesForPeer(peerId);
+    for (const item of pending) {
+      const sent = send(item.message);
+      if (!sent) return;
+      await removePendingDirectMessage(item.id);
+    }
+  }, [peerId, send]);
+
   useEffect(() => {
     if (!peerId || !isOpen) return;
     let cancelled = false;
 
     (async () => {
-      const pending = await getPendingDirectMessagesForPeer(peerId);
-      for (const item of pending) {
-        if (cancelled) return;
-        const sent = send(item.message);
-        if (!sent) return;
-        await removePendingDirectMessage(item.id);
-      }
+      if (cancelled) return;
+      await flushPendingDirect();
     })().catch((err) => {
       console.error('[DC] pending direct flush failed', err);
     });
 
     return () => { cancelled = true; };
-  }, [isOpen, peerId, send]);
+  }, [isOpen, peerId, flushPendingDirect]);
 
-  return { send, isOpen };
+  return { send, isOpen, retryPending: flushPendingDirect };
 }

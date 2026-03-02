@@ -10,6 +10,8 @@ interface Props {
   isMine: boolean;
   time: number;
   onReact?: (emoji: string) => void;
+  statusLabel?: string;
+  onStatusClick?: () => void;
 }
 
 function getInitials(name: string): string {
@@ -97,7 +99,18 @@ function getSortedReactionEntries(reactions?: MessageReactions): Array<[string, 
   return entries;
 }
 
-export function MessageBubble({ body, attachments, reactions, currentUserId, authorName, isMine, time, onReact }: Props) {
+export function MessageBubble({
+  body,
+  attachments,
+  reactions,
+  currentUserId,
+  authorName,
+  isMine,
+  time,
+  onReact,
+  statusLabel,
+  onStatusClick,
+}: Props) {
   const imageUrls = extractImageUrls(body);
   const imageAttachments = (attachments ?? []).filter((a) => a.kind === 'image');
   const reactionEntries = getSortedReactionEntries(reactions);
@@ -231,8 +244,24 @@ export function MessageBubble({ body, attachments, reactions, currentUserId, aut
             ))}
           </div>
         )}
-        <div className="text-[10px] opacity-70 text-right mt-0.5">
-          {new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <div className="mt-1 flex items-center justify-end gap-1.5">
+          {statusLabel && (
+            <button
+              type="button"
+              onClick={onStatusClick}
+              disabled={!onStatusClick}
+              className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                onStatusClick
+                  ? 'opacity-90 border-white/25 bg-black/20 hover:bg-black/30'
+                  : 'opacity-70 border-white/15 bg-black/15'
+              }`}
+            >
+              {statusLabel}
+            </button>
+          )}
+          <div className="text-[10px] opacity-70 text-right">
+            {new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChannelPosts } from '../hooks/useChannelPosts';
 import { MessageBubble } from '../components/MessageBubble';
@@ -6,6 +6,7 @@ import { Composer } from '../components/Composer';
 import { generatePostId, type ChannelPost, type P2PMessage } from '@famchat/shared';
 import type { Channel } from '../hooks/useChannels';
 import type { WsClient } from '../services/wsClient';
+import { getPendingChannelPosts } from '../chat/db';
 import { ArrowLeft } from 'lucide-react';
 
 const MAX_P2P_IMAGE_BYTES = 1024 * 1024;
@@ -37,15 +38,48 @@ interface Props {
 export function ChannelScreen({ currentUserId, currentUserName, wsClient, channels, p2p }: Props) {
   const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
-  const { posts, sendPost } = useChannelPosts(channelId, wsClient, p2p);
+  const { posts, sendPost, retryPending } = useChannelPosts(channelId, wsClient, p2p);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [pendingByPostId, setPendingByPostId] = useState<Map<string, number>>(new Map());
 
   const channel = channels.find(c => c.id === channelId);
   const isOwner = channel?.ownerId === currentUserId;
+  const connectedPeerCount = p2p?.connectedPeerIds.length ?? 0;
+  const pendingCount = pendingByPostId.size;
+  const totalSentPeers = useMemo(() => {
+    let total = 0;
+    for (const sentCount of pendingByPostId.values()) total += sentCount;
+    return total;
+  }, [pendingByPostId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [posts.length]);
+
+  useEffect(() => {
+    if (!channelId) {
+      setPendingByPostId(new Map());
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      const pending = await getPendingChannelPosts(channelId);
+      if (cancelled) return;
+      const next = new Map<string, number>();
+      for (const item of pending) {
+        next.set(item.id, item.sentTo.length);
+      }
+      setPendingByPostId(next);
+    };
+    refresh().catch((err) => console.error('[Channel] refresh pending failed', err));
+    const timer = window.setInterval(() => {
+      refresh().catch((err) => console.error('[Channel] refresh pending failed', err));
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [channelId, connectedPeerCount, posts.length]);
 
   if (!channelId) return null;
 
@@ -102,8 +136,25 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
         </button>
         <span className="font-semibold text-gray-100">{channel?.name ?? 'Channel'}</span>
       </div>
+      <div className="px-4 py-1 text-[11px] text-gray-500 border-b border-gray-800 bg-gray-900/70 flex items-center justify-between">
+        <span>Sync: {connectedPeerCount} peers • Pending {pendingCount} • Relayed {totalSentPeers}</span>
+        {pendingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => retryPending().catch((err) => console.error('[Channel] retry pending failed', err))}
+            className="text-emerald-400 hover:text-emerald-300"
+          >
+            Retry
+          </button>
+        )}
+      </div>
       <div className="flex-1 overflow-auto px-4 py-3">
-        {posts.map(p => (
+        {posts.map((p) => {
+          const sentToCount = pendingByPostId.get(p.id);
+          const statusLabel = p.authorId === currentUserId
+            ? (sentToCount === undefined ? undefined : (sentToCount === 0 ? 'Pending' : `Sent to ${sentToCount}`))
+            : undefined;
+          return (
           <MessageBubble
             key={p.id}
             body={p.body}
@@ -111,8 +162,11 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
             authorName={p.authorName}
             isMine={p.authorId === currentUserId}
             time={p.createdAt}
+            statusLabel={statusLabel}
+            onStatusClick={sentToCount === 0 ? () => retryPending().catch((err) => console.error('[Channel] retry pending failed', err)) : undefined}
           />
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
       {isOwner ? (

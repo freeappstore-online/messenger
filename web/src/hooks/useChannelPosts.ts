@@ -182,5 +182,5 @@ export function useChannelPosts(
     });
   }, [channelId, wsClient, addPosts, flushPendingToConnectedPeers]);
 
-  return { posts, sendPost };
+  return { posts, sendPost, retryPending: flushPendingToConnectedPeers };
 }
