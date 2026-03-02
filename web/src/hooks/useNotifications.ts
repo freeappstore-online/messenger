@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { hasNotificationPermission } from '../utils/pwa';
 import { requestFCMToken, saveFCMToken, setupForegroundMessageHandler } from '../services/fcm';
 import type { ContactSettings } from './useContactSettings';
@@ -16,31 +16,49 @@ export function useNotifications(
   settingsByUser: Map<string, ContactSettings>,
 ) {
   const [permissionGranted, setPermissionGranted] = useState(hasNotificationPermission);
+  const settingsRef = useRef(settingsByUser);
+  const savedTokenByUserRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     setPermissionGranted(hasNotificationPermission());
   }, []);
 
   useEffect(() => {
+    settingsRef.current = settingsByUser;
+  }, [settingsByUser]);
+
+  // Register token only when user/permission changes to avoid duplicate writes.
+  useEffect(() => {
     if (!userId || !permissionGranted) return;
-
     let cancelled = false;
-    let unsubMessage: (() => void) | null = null;
 
-    const setup = async () => {
+    const registerToken = async () => {
       try {
         const token = await requestFCMToken();
         if (token && !cancelled) {
+          const existing = savedTokenByUserRef.current.get(userId);
+          if (existing === token) return;
           await saveFCMToken(userId, token);
+          savedTokenByUserRef.current.set(userId, token);
         }
       } catch (error) {
         console.error('[Notifications] Token registration failed:', error);
       }
+    };
 
+    registerToken();
+    return () => { cancelled = true; };
+  }, [userId, permissionGranted]);
+
+  useEffect(() => {
+    if (!userId || !permissionGranted) return;
+    let unsubMessage: (() => void) | null = null;
+
+    const setupHandler = async () => {
       try {
         unsubMessage = await setupForegroundMessageHandler((payload) => {
-          const peerId = userId ? getPeerIdFromChatUrl(payload.data?.url, userId) : undefined;
-          if (peerId && settingsByUser.get(peerId)?.muteInApp) return;
+          const senderId = payload.data?.senderId ?? getPeerIdFromChatUrl(payload.data?.url, userId);
+          if (senderId && settingsRef.current.get(senderId)?.muteInApp) return;
           const title = payload.notification?.title || 'FamChat';
           const body = payload.notification?.body || 'New message';
           if (document.hidden) return;
@@ -53,13 +71,12 @@ export function useNotifications(
       }
     };
 
-    setup();
+    setupHandler();
 
     return () => {
-      cancelled = true;
       unsubMessage?.();
     };
-  }, [userId, permissionGranted, settingsByUser]);
+  }, [userId, permissionGranted]);
 
   return { permissionGranted, setPermissionGranted };
 }

@@ -116,7 +116,12 @@ describe('routeMessage — chat', () => {
       return msg.type === 'ack';
     });
     await routeMessage('u1', { type: 'chat', to: 'u2', convId: 'conv1', message: makeMsg() });
-    expect(mockSendPushToUser).toHaveBeenCalledWith('u2', 'New message', expect.any(String), expect.any(Object));
+    expect(mockSendPushToUser).toHaveBeenCalledWith(
+      'u2',
+      'New message',
+      expect.any(String),
+      expect.objectContaining({ senderId: 'u1', url: '/chat/conv1' }),
+    );
   });
 
   it('does not send push when recipient muted sender', async () => {
@@ -154,6 +159,13 @@ describe('routeMessage — chat_group', () => {
     mockSendTo.mockImplementation((_userId: string, msg: any) => msg.type === 'ack');
     await routeMessage('u1', { type: 'chat_group', convId: 'conv1', message: makeMsg() });
     expect(mockSendPushToUser).toHaveBeenCalledTimes(2); // u2 and u3
+    expect(mockSendPushToUser).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      'New message',
+      expect.any(String),
+      expect.objectContaining({ senderId: 'u1', url: '/chat/conv1' }),
+    );
   });
 
   it('skips push for muted members', async () => {

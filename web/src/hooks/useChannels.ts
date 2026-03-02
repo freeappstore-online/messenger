@@ -31,24 +31,41 @@ export function useChannels(userId: string | undefined) {
 
   // Load all channels + user's subscriptions
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setChannels([]);
+      setSubscriptions(new Set());
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     let cancelled = false;
 
     (async () => {
-      const [channelsSnap, subsSnap] = await Promise.all([
-        getDocs(collection(db, 'channels')),
-        getDocs(query(collectionGroup(db, 'subscribers'), where(documentId(), '==', userId))),
-      ]);
-      if (cancelled) return;
+      try {
+        const [channelsSnap, subsSnap] = await Promise.all([
+          getDocs(collection(db, 'channels')),
+          getDocs(query(collectionGroup(db, 'subscribers'), where(documentId(), '==', userId))),
+        ]);
+        if (cancelled) return;
 
-      setChannels(channelsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Channel)));
-      const subs = new Set<string>();
-      for (const subDoc of subsSnap.docs) {
-        const channelId = subDoc.ref.parent.parent?.id;
-        if (channelId) subs.add(channelId);
+        setChannels(channelsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Channel)));
+        const subs = new Set<string>();
+        for (const subDoc of subsSnap.docs) {
+          const channelId = subDoc.ref.parent.parent?.id;
+          if (channelId) subs.add(channelId);
+        }
+        setSubscriptions(subs);
+      } catch (error) {
+        console.error('[Channels] failed to load channels/subscriptions', error);
+        if (!cancelled) {
+          setChannels([]);
+          setSubscriptions(new Set());
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-      setSubscriptions(subs);
-      setLoading(false);
     })();
 
     return () => {

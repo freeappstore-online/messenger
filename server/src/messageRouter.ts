@@ -67,6 +67,7 @@ async function handleChat(
       sendPushToUser(msg.to, 'New message', `${msg.message.authorName}: ${preview}`, {
         url: `/chat/${msg.convId}`,
         tag: `chat-${msg.convId}`,
+        senderId: fromUserId,
       }).catch(err => console.error('[push] chat push failed:', err));
     }
   }
@@ -112,6 +113,7 @@ async function handleGroupChat(
           sendPushToUser(memberId, 'New message', `${msg.message.authorName}: ${preview}`, {
             url: `/chat/${msg.convId}`,
             tag: `chat-${msg.convId}`,
+            senderId: fromUserId,
           }).catch(err => console.error('[push] group push failed:', err));
         }
       }
