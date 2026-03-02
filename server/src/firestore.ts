@@ -1,5 +1,5 @@
 import { getFirestore } from 'firebase-admin/firestore';
-import type { PlainMessage } from './types.js';
+import type { MessageReactions, PlainMessage } from './types.js';
 
 const db = () => getFirestore();
 
@@ -30,6 +30,39 @@ export async function saveMessage(msg: PlainMessage) {
     updatedAt: msg.createdAt,
   });
   await batch.commit();
+}
+
+export async function toggleMessageReaction(
+  convId: string,
+  messageId: string,
+  userId: string,
+  emoji: string,
+): Promise<MessageReactions | null> {
+  const msgRef = db().doc(`conversations/${convId}/messages/${messageId}`);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(msgRef);
+    if (!snap.exists) return null;
+
+    const data = snap.data() as PlainMessage;
+    const prev: MessageReactions = data.reactions ?? {};
+    const next: MessageReactions = {};
+
+    for (const [key, users] of Object.entries(prev)) {
+      const unique = [...new Set(users)].filter((id): id is string => Boolean(id));
+      if (unique.length > 0) next[key] = unique;
+    }
+
+    const currentUsers = next[emoji] ?? [];
+    if (currentUsers.includes(userId)) {
+      next[emoji] = currentUsers.filter((id) => id !== userId);
+      if (next[emoji].length === 0) delete next[emoji];
+    } else {
+      next[emoji] = [...currentUsers, userId];
+    }
+
+    tx.update(msgRef, { reactions: next });
+    return next;
+  });
 }
 
 export async function getConversationMembers(convId: string): Promise<string[]> {

@@ -1,5 +1,6 @@
 export type {
   PlainMessage,
+  MessageReactions,
   ChannelPost,
   SignalPayload,
   ClientMessage,

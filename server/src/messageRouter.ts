@@ -1,11 +1,12 @@
 import type { ClientMessage, ServerMessage } from './types.js';
 import { sendTo } from './presence.js';
-import { saveMessage, getConversationMembers, getMessagesSince, getUserConversations } from './firestore.js';
+import { saveMessage, getConversationMembers, getMessagesSince, getUserConversations, toggleMessageReaction } from './firestore.js';
 import { trackP2PSignal } from './channelFanout.js';
 import { sendPushToUser } from './pushNotify.js';
 import { isContact } from './contacts.js';
 
 const MAX_BODY_LENGTH = 10_000;
+const MAX_EMOJI_LENGTH = 16;
 const MAX_SYNC_MESSAGES = 1000;
 
 export async function routeMessage(fromUserId: string, msg: ClientMessage) {
@@ -14,6 +15,8 @@ export async function routeMessage(fromUserId: string, msg: ClientMessage) {
       return handleChat(fromUserId, msg);
     case 'chat_group':
       return handleGroupChat(fromUserId, msg);
+    case 'chat_reaction':
+      return handleChatReaction(fromUserId, msg);
     case 'signal':
       return handleSignal(fromUserId, msg);
     case 'sync':
@@ -131,6 +134,41 @@ async function handleSignal(
     payload: msg.payload,
   });
   console.log(`[signal] ${fromUserId} -> ${msg.to} ${(msg.payload as { type: string }).type} delivered=${delivered}`);
+}
+
+async function handleChatReaction(
+  fromUserId: string,
+  msg: Extract<ClientMessage, { type: 'chat_reaction' }>
+) {
+  if (typeof msg.emoji !== 'string') return;
+  const emoji = msg.emoji.trim();
+  if (!emoji || emoji.length > MAX_EMOJI_LENGTH) {
+    console.warn(`[chat_reaction] rejected: invalid emoji from ${fromUserId}`);
+    return;
+  }
+
+  const members = await getConversationMembers(msg.convId);
+  if (!members.includes(fromUserId)) {
+    console.warn(`[chat_reaction] rejected: ${fromUserId} not member of ${msg.convId}`);
+    return;
+  }
+
+  const reactions = await toggleMessageReaction(msg.convId, msg.messageId, fromUserId, emoji);
+  if (!reactions) {
+    console.warn(`[chat_reaction] rejected: message ${msg.messageId} not found in ${msg.convId}`);
+    return;
+  }
+
+  const payload: ServerMessage = {
+    type: 'message_reaction',
+    convId: msg.convId,
+    messageId: msg.messageId,
+    reactions,
+    updatedBy: fromUserId,
+  };
+  for (const memberId of members) {
+    sendTo(memberId, payload);
+  }
 }
 
 async function handleSync(

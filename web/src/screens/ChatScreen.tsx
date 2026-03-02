@@ -8,6 +8,17 @@ import { Composer } from '../components/Composer';
 import type { WsClient } from '../services/wsClient';
 import { ArrowLeft, Phone, Video } from 'lucide-react';
 
+const MAX_P2P_IMAGE_BYTES = 1024 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image.'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Props {
   currentUserId: string;
   currentUserName: string;
@@ -19,7 +30,7 @@ interface Props {
 export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUsers, onStartCall }: Props) {
   const { convId } = useParams<{ convId: string }>();
   const navigate = useNavigate();
-  const { messages, sendMessage, receiveMessage } = useMessages(convId, wsClient);
+  const { messages, sendMessage, receiveMessage, reactToMessage } = useMessages(convId, wsClient, currentUserId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const parts = convId?.split(':') ?? [];
@@ -79,6 +90,48 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
     }
   };
 
+  const handleSendImage = async (file: File) => {
+    if (!convId) return;
+    if (!toUserId) return;
+    if (!peerChannel.isOpen) {
+      window.alert('Image transfer is P2P-only right now. Wait for direct connection and try again.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      window.alert('Only image files are supported.');
+      return;
+    }
+    if (file.size > MAX_P2P_IMAGE_BYTES) {
+      window.alert('Image too large. Please pick an image up to 1MB.');
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const msg: PlainMessage = {
+        id: crypto.randomUUID(),
+        authorId: currentUserId,
+        authorName: currentUserName,
+        convId,
+        body: file.name || 'Photo',
+        createdAt: Date.now(),
+        attachments: [{
+          id: crypto.randomUUID(),
+          kind: 'image',
+          mimeType: file.type || 'image/jpeg',
+          fileName: file.name,
+          size: file.size,
+          dataUrl,
+        }],
+      };
+      receiveMessage(msg);
+      peerChannel.send(msg);
+    } catch (err) {
+      console.error('[Chat] handleSendImage failed', err);
+      window.alert('Could not send image.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900">
@@ -110,9 +163,13 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
           <MessageBubble
             key={m.id}
             body={m.body}
+            attachments={m.attachments}
+            reactions={m.reactions}
+            currentUserId={currentUserId}
             authorName={m.authorName}
             isMine={m.authorId === currentUserId}
             time={m.createdAt}
+            onReact={(emoji) => reactToMessage(m.id, emoji)}
           />
         ))}
         <div ref={bottomRef} />
@@ -120,7 +177,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
       {isTyping && (
         <div className="px-4 py-1 text-xs text-gray-400">{peerName} is typing...</div>
       )}
-      <Composer onSend={handleSend} onTyping={handleTyping} />
+      <Composer onSend={handleSend} onTyping={handleTyping} onSendImage={handleSendImage} />
     </div>
   );
 }

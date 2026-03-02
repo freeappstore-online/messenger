@@ -3,11 +3,32 @@ import { collection, query, orderBy, getDocs, limitToLast } from 'firebase/fires
 import { db } from '../firebase';
 import { chatDB } from '../chat/db';
 import type { WsClient, ServerMessage } from '../services/wsClient';
-import type { PlainMessage } from '@famchat/shared';
+import type { MessageReactions, PlainMessage } from '@famchat/shared';
 
 export type { PlainMessage } from '@famchat/shared';
 
-export function useMessages(convId: string | undefined, wsClient: WsClient) {
+function toggleReaction(
+  current: MessageReactions | undefined,
+  emoji: string,
+  userId: string,
+): MessageReactions {
+  const next: MessageReactions = {};
+  for (const [key, users] of Object.entries(current ?? {})) {
+    const unique = [...new Set(users)].filter(Boolean);
+    if (unique.length > 0) next[key] = unique;
+  }
+  const users = next[emoji] ?? [];
+  if (users.includes(userId)) {
+    const filtered = users.filter((id) => id !== userId);
+    if (filtered.length > 0) next[emoji] = filtered;
+    else delete next[emoji];
+  } else {
+    next[emoji] = [...users, userId];
+  }
+  return next;
+}
+
+export function useMessages(convId: string | undefined, wsClient: WsClient, currentUserId?: string) {
   const [messages, setMessages] = useState<PlainMessage[]>([]);
   const seenIds = useRef(new Set<string>());
 
@@ -68,6 +89,9 @@ export function useMessages(convId: string | undefined, wsClient: WsClient) {
             setMessages(prev => [...prev, msg.message]);
           }
         }
+      } else if (msg.type === 'message_reaction' && msg.convId === convId) {
+        setMessages(prev => prev.map((m) => m.id === msg.messageId ? { ...m, reactions: msg.reactions } : m));
+        chatDB.messages.update(msg.messageId, { reactions: msg.reactions }).catch(() => {});
       }
     });
   }, [convId, wsClient]);
@@ -93,6 +117,11 @@ export function useMessages(convId: string | undefined, wsClient: WsClient) {
         setMessages(prev => [...prev, msg]);
       }
       // Send via WS — server persists to Firestore
+      // Keep binary image payloads off backend storage.
+      if (msg.attachments && msg.attachments.length > 0) {
+        console.warn('[useMessages] Attachment message blocked from WS path; use P2P data channel');
+        return;
+      }
       if (toUserId) {
         wsClient.send({ type: 'chat', to: toUserId, convId: msg.convId, message: msg });
       } else {
@@ -102,5 +131,26 @@ export function useMessages(convId: string | undefined, wsClient: WsClient) {
     [wsClient],
   );
 
-  return { messages, sendMessage, receiveMessage };
+  const reactToMessage = useCallback((messageId: string, emoji: string) => {
+    if (!convId || !currentUserId) return;
+    const normalized = emoji.trim();
+    if (!normalized) return;
+
+    setMessages((prev) => {
+      let nextReactions: MessageReactions | undefined;
+      const next = prev.map((m) => {
+        if (m.id !== messageId) return m;
+        nextReactions = toggleReaction(m.reactions, normalized, currentUserId);
+        return { ...m, reactions: nextReactions };
+      });
+      if (nextReactions) {
+        chatDB.messages.update(messageId, { reactions: nextReactions }).catch(() => {});
+      }
+      return next;
+    });
+
+    wsClient.send({ type: 'chat_reaction', convId, messageId, emoji: normalized });
+  }, [convId, currentUserId, wsClient]);
+
+  return { messages, sendMessage, receiveMessage, reactToMessage };
 }

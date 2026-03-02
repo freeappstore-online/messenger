@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { ChannelPost } from '@famchat/shared';
+import type { ChannelPost, MessageAttachment, MessageReactions } from '@famchat/shared';
 
 export interface MessageRecord {
   id: string;
@@ -8,6 +8,8 @@ export interface MessageRecord {
   authorName: string;
   body: string;
   createdAt: number;
+  attachments?: MessageAttachment[];
+  reactions?: MessageReactions;
 }
 
 export interface ChannelPostRecord extends ChannelPost {
@@ -45,7 +47,13 @@ export async function getChannelPosts(
     q = q.and(p => p.createdAt > sinceTimestamp);
   }
   const records = await q.sortBy('createdAt');
-  return records.slice(-limit).map(({ channelId: _, ...post }) => post);
+  return records.slice(-limit).map((record) => ({
+    id: record.id,
+    authorId: record.authorId,
+    authorName: record.authorName,
+    body: record.body,
+    createdAt: record.createdAt,
+  }));
 }
 
 export async function putChannelPost(channelId: string, post: ChannelPost): Promise<void> {

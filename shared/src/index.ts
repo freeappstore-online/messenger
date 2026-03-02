@@ -33,7 +33,20 @@ export interface PlainMessage {
   convId: string;
   body: string;
   createdAt: number;
+  attachments?: MessageAttachment[];
+  reactions?: MessageReactions;
 }
+
+export interface MessageAttachment {
+  id: string;
+  kind: 'image';
+  mimeType: string;
+  fileName?: string;
+  size: number;
+  dataUrl: string;
+}
+
+export type MessageReactions = Record<string, string[]>;
 
 export interface ChannelPost {
   id: string;
@@ -60,6 +73,7 @@ export type SignalPayload =
 export type ClientMessage =
   | { type: 'chat'; to: string; convId: string; message: PlainMessage }
   | { type: 'chat_group'; convId: string; message: PlainMessage }
+  | { type: 'chat_reaction'; convId: string; messageId: string; emoji: string }
   | { type: 'channel_post'; channelId: string; post: ChannelPost }
   | { type: 'signal'; to: string; payload: SignalPayload }
   | { type: 'sync'; since: number }
@@ -69,6 +83,7 @@ export type ClientMessage =
 // Server -> Client
 export type ServerMessage =
   | { type: 'chat'; from: string; convId: string; message: PlainMessage }
+  | { type: 'message_reaction'; convId: string; messageId: string; reactions: MessageReactions; updatedBy: string }
   | { type: 'signal'; from: string; payload: SignalPayload }
   | { type: 'presence'; userId: string; online: boolean }
   | { type: 'sync'; messages: PlainMessage[] }

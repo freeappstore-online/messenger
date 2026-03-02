@@ -14,11 +14,21 @@ interface Props {
 
 export function CallOverlay({ call, peerName, onAccept, onReject, onEnd, onToggleMute, onToggleVideo }: Props) {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (remoteVideoRef.current && call.remoteStream) {
       remoteVideoRef.current.srcObject = call.remoteStream;
+    }
+  }, [call.remoteStream]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current && call.remoteStream) {
+      remoteAudioRef.current.srcObject = call.remoteStream;
+      remoteAudioRef.current.play().catch((err) => {
+        console.warn('[Call] remote audio autoplay blocked', err);
+      });
     }
   }, [call.remoteStream]);
 
@@ -36,6 +46,7 @@ export function CallOverlay({ call, peerName, onAccept, onReject, onEnd, onToggl
 
   return (
     <div className="fixed inset-0 z-[1000] bg-gray-950 flex flex-col justify-between items-center">
+      {call.remoteStream && <audio ref={remoteAudioRef} autoPlay playsInline />}
       {isVideo && call.remoteStream && (
         <video ref={remoteVideoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
       )}

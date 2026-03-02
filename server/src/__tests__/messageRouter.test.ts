@@ -14,11 +14,13 @@ const mockSaveMessage = vi.fn().mockResolvedValue(undefined);
 const mockGetConversationMembers = vi.fn().mockResolvedValue([]);
 const mockGetMessagesSince = vi.fn().mockResolvedValue([]);
 const mockGetUserConversations = vi.fn().mockResolvedValue([]);
+const mockToggleMessageReaction = vi.fn().mockResolvedValue({});
 vi.mock('../firestore.js', () => ({
   saveMessage: (...args: any[]) => mockSaveMessage(...args),
   getConversationMembers: (...args: any[]) => mockGetConversationMembers(...args),
   getMessagesSince: (...args: any[]) => mockGetMessagesSince(...args),
   getUserConversations: (...args: any[]) => mockGetUserConversations(...args),
+  toggleMessageReaction: (...args: any[]) => mockToggleMessageReaction(...args),
 }));
 
 const mockIsContact = vi.fn().mockResolvedValue(false);
@@ -172,6 +174,29 @@ describe('routeMessage — signal', () => {
     await routeMessage('u1', { type: 'signal', to: 'u2', payload });
     expect(mockTrackP2PSignal).toHaveBeenCalledWith('u1', 'u2', payload);
     expect(mockSendTo).toHaveBeenCalledWith('u2', expect.objectContaining({ type: 'signal', from: 'u1' }));
+  });
+});
+
+describe('routeMessage — chat_reaction', () => {
+  it('rejects reactions from non-members', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u2', 'u3']);
+    await routeMessage('u1', { type: 'chat_reaction', convId: 'conv1', messageId: 'm1', emoji: '👍' });
+    expect(mockToggleMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid emoji payloads', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u1', 'u2']);
+    await routeMessage('u1', { type: 'chat_reaction', convId: 'conv1', messageId: 'm1', emoji: '' });
+    expect(mockToggleMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it('broadcasts updated reactions to conversation members', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u1', 'u2']);
+    mockToggleMessageReaction.mockResolvedValue({ '👍': ['u1'] });
+    await routeMessage('u1', { type: 'chat_reaction', convId: 'conv1', messageId: 'm1', emoji: '👍' });
+    expect(mockToggleMessageReaction).toHaveBeenCalledWith('conv1', 'm1', 'u1', '👍');
+    expect(mockSendTo).toHaveBeenCalledWith('u1', expect.objectContaining({ type: 'message_reaction', messageId: 'm1' }));
+    expect(mockSendTo).toHaveBeenCalledWith('u2', expect.objectContaining({ type: 'message_reaction', messageId: 'm1' }));
   });
 });
 
