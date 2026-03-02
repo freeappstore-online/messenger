@@ -44,6 +44,7 @@ export async function toggleMessageReaction(
     if (!snap.exists) return null;
 
     const data = snap.data() as PlainMessage;
+    if (data.authorId === userId) return null;
     const prev: MessageReactions = data.reactions ?? {};
     const next: MessageReactions = {};
 

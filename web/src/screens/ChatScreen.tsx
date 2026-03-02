@@ -169,7 +169,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
             authorName={m.authorName}
             isMine={m.authorId === currentUserId}
             time={m.createdAt}
-            onReact={(emoji) => reactToMessage(m.id, emoji)}
+            onReact={m.authorId === currentUserId ? undefined : (emoji) => reactToMessage(m.id, emoji)}
           />
         ))}
         <div ref={bottomRef} />

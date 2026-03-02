@@ -198,6 +198,14 @@ describe('routeMessage — chat_reaction', () => {
     expect(mockSendTo).toHaveBeenCalledWith('u1', expect.objectContaining({ type: 'message_reaction', messageId: 'm1' }));
     expect(mockSendTo).toHaveBeenCalledWith('u2', expect.objectContaining({ type: 'message_reaction', messageId: 'm1' }));
   });
+
+  it('does not broadcast when reaction update is rejected', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u1', 'u2']);
+    mockToggleMessageReaction.mockResolvedValue(null);
+    await routeMessage('u1', { type: 'chat_reaction', convId: 'conv1', messageId: 'm1', emoji: '👍' });
+    const reactionCalls = mockSendTo.mock.calls.filter((call) => call[1].type === 'message_reaction');
+    expect(reactionCalls).toHaveLength(0);
+  });
 });
 
 describe('routeMessage — sync', () => {

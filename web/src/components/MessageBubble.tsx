@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MessageAttachment, MessageReactions } from '@famchat/shared';
 
 interface Props {
@@ -101,6 +101,48 @@ export function MessageBubble({ body, attachments, reactions, currentUserId, aut
   const imageUrls = extractImageUrls(body);
   const imageAttachments = (attachments ?? []).filter((a) => a.kind === 'image');
   const reactionEntries = getSortedReactionEntries(reactions);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
+
+  const clearHoldTimer = () => {
+    if (!holdTimerRef.current) return;
+    clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = null;
+  };
+
+  const handleHoldStart = () => {
+    if (!onReact) return;
+    clearHoldTimer();
+    holdTimerRef.current = setTimeout(() => {
+      setPickerOpen(true);
+      holdTimerRef.current = null;
+    }, 350);
+  };
+
+  const handleHoldEnd = () => {
+    clearHoldTimer();
+  };
+
+  const handleReact = (emoji: string) => {
+    onReact?.(emoji);
+    setPickerOpen(false);
+  };
+
+  useEffect(() => {
+    return () => clearHoldTimer();
+  }, []);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onPointerDown = (ev: PointerEvent) => {
+      const target = ev.target as Node | null;
+      if (target && bubbleRef.current?.contains(target)) return;
+      setPickerOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [pickerOpen]);
 
   return (
     <div className={`flex items-end gap-2 mb-2 ${isMine ? 'flex-row-reverse' : ''}`}>
@@ -109,7 +151,19 @@ export function MessageBubble({ body, attachments, reactions, currentUserId, aut
           {getInitials(authorName)}
         </div>
       )}
-      <div className={`max-w-[75%] px-3 py-2 rounded-xl ${isMine ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-100'}`}>
+      <div
+        ref={bubbleRef}
+        onPointerDown={handleHoldStart}
+        onPointerUp={handleHoldEnd}
+        onPointerCancel={handleHoldEnd}
+        onPointerLeave={handleHoldEnd}
+        onContextMenu={(e) => {
+          if (!onReact) return;
+          e.preventDefault();
+          setPickerOpen(true);
+        }}
+        className={`relative max-w-[75%] px-3 py-2 rounded-xl ${isMine ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-100'}`}
+      >
         {!isMine && <div className="text-[11px] font-semibold mb-0.5 text-gray-400">{authorName}</div>}
         <div className="text-sm break-words whitespace-pre-wrap">{renderMessageText(body, isMine)}</div>
         {imageAttachments.length > 0 && (
@@ -161,13 +215,13 @@ export function MessageBubble({ body, attachments, reactions, currentUserId, aut
             })}
           </div>
         )}
-        {onReact && (
+        {onReact && pickerOpen && (
           <div className="mt-2 flex flex-wrap gap-1">
             {REACTION_CHOICES.map((emoji) => (
               <button
                 key={emoji}
                 type="button"
-                onClick={() => onReact(emoji)}
+                onClick={() => handleReact(emoji)}
                 className="w-7 h-7 rounded-full bg-black/20 hover:bg-black/30 transition-colors text-sm"
                 aria-label={`React ${emoji}`}
                 title={`React ${emoji}`}
