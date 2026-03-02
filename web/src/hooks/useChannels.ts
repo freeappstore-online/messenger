@@ -1,5 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, getDoc, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import {
+  collection,
+  collectionGroup,
+  getDocs,
+  query,
+  where,
+  documentId,
+  doc,
+  setDoc,
+  deleteDoc,
+  addDoc,
+} from 'firebase/firestore';
 import { db } from '../firebase';
 
 export interface Channel {
@@ -21,18 +32,28 @@ export function useChannels(userId: string | undefined) {
   // Load all channels + user's subscriptions
   useEffect(() => {
     if (!userId) return;
-    getDocs(collection(db, 'channels')).then(async (channelsSnap) => {
+    let cancelled = false;
+
+    (async () => {
+      const [channelsSnap, subsSnap] = await Promise.all([
+        getDocs(collection(db, 'channels')),
+        getDocs(query(collectionGroup(db, 'subscribers'), where(documentId(), '==', userId))),
+      ]);
+      if (cancelled) return;
+
       setChannels(channelsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Channel)));
       const subs = new Set<string>();
-      await Promise.all(
-        channelsSnap.docs.map(async (ch) => {
-          const snap = await getDoc(doc(db, 'channels', ch.id, 'subscribers', userId));
-          if (snap.exists()) subs.add(ch.id);
-        })
-      );
+      for (const subDoc of subsSnap.docs) {
+        const channelId = subDoc.ref.parent.parent?.id;
+        if (channelId) subs.add(channelId);
+      }
       setSubscriptions(subs);
       setLoading(false);
-    });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const createChannel = useCallback(async (name: string, description: string) => {
