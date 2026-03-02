@@ -99,7 +99,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
 
   if (!convId) return null;
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     const msg: PlainMessage = {
       id: crypto.randomUUID(),
       authorId: currentUserId,
@@ -111,7 +111,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
     console.log('[Chat] handleSend', { dcOpen: peerChannel.isOpen, toUserId, path: peerChannel.isOpen && toUserId ? 'P2P' : 'WS' });
     if (peerChannel.isOpen && toUserId) {
       receiveMessage(msg);
-      const sent = peerChannel.send(msg);
+      const sent = await peerChannel.send(msg);
       if (!sent) {
         sendMessage(msg, toUserId);
       }
@@ -152,7 +152,7 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
       };
       receiveMessage(msg);
       if (peerChannel.isOpen) {
-        const sent = peerChannel.send(msg);
+        const sent = await peerChannel.send(msg);
         if (!sent) {
           await queuePendingDirectMessage(toUserId, msg);
         }

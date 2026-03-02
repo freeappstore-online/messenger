@@ -68,7 +68,8 @@ export type SignalPayload =
   | { type: 'dc-ready'; connectionId?: string }
   | { type: 'dc-offer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
   | { type: 'dc-answer'; sdp: RTCSessionDescriptionInit; connectionId?: string }
-  | { type: 'dc-ice'; candidate: RTCIceCandidateInit; connectionId?: string };
+  | { type: 'dc-ice'; candidate: RTCIceCandidateInit; connectionId?: string }
+  | { type: 'e2ee-key'; publicKey: Record<string, unknown> };
 
 // Client -> Server
 export type ClientMessage =

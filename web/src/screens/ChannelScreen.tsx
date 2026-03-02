@@ -21,8 +21,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 interface P2PFunctions {
-  broadcastP2P: (msg: P2PMessage) => void;
-  sendToPeer: (peerId: string, msg: P2PMessage) => void;
+  broadcastP2P: (msg: P2PMessage) => Promise<void>;
+  sendToPeer: (peerId: string, msg: P2PMessage) => Promise<boolean>;
   onP2PMessage: (handler: (peerId: string, msg: P2PMessage) => void) => () => void;
   connectedPeerIds: string[];
 }

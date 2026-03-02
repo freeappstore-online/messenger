@@ -1,6 +1,13 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { WsClient } from '../services/wsClient';
 import type { P2PMessage, SignalPayload } from '@famchat/shared';
+import {
+  decryptFromPeer,
+  encryptForPeer,
+  getIdentityPublicJwk,
+  isEncryptedPayload,
+  rememberPeerPublicKey,
+} from '../crypto/e2ee';
 
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -27,8 +34,22 @@ interface IncomingTransfer {
   chunks: string[];
 }
 
+interface EncryptedWirePacket {
+  type: 'e2ee';
+  payload: {
+    v: 1;
+    iv: string;
+    ct: string;
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isEncryptedWirePacket(value: unknown): value is EncryptedWirePacket {
+  if (!isRecord(value)) return false;
+  return value.type === 'e2ee' && isEncryptedPayload(value.payload);
 }
 
 function isP2PMessage(value: unknown): value is P2PMessage {
@@ -68,6 +89,16 @@ export function useChannelPeers(
     [wsClient],
   );
 
+  const sendIdentityKey = useCallback((peerId: string) => {
+    getIdentityPublicJwk()
+      .then((publicKey) => {
+        sendSignal(peerId, { type: 'e2ee-key', publicKey: publicKey as Record<string, unknown> });
+      })
+      .catch((err) => {
+        console.error('[E2EE] failed to send identity key', err);
+      });
+  }, [sendSignal]);
+
   const updateConnected = useCallback(() => {
     const ids: string[] = [];
     for (const [id, conn] of peersRef.current) {
@@ -86,66 +117,75 @@ export function useChannelPeers(
       if (peer) peer.dc = dc;
 
       dc.onopen = () => {
-        console.log('[P2P-DC] open', peerId);
         if (peer) peer.open = true;
         updateConnected();
       };
       dc.onclose = () => {
-        console.log('[P2P-DC] close', peerId);
         if (peer) peer.open = false;
         updateConnected();
       };
       dc.onerror = (e) => console.error('[P2P-DC] error', peerId, e);
       dc.onmessage = (e) => {
-        try {
-          if (typeof e.data !== 'string') return;
-          const parsed: unknown = JSON.parse(e.data);
-          if (isP2PMessage(parsed)) {
-            for (const h of handlersRef.current) h(peerId, parsed);
-            return;
-          }
-          if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-          const packet = parsed as DCPacket;
+        void (async () => {
+          try {
+            if (typeof e.data !== 'string') return;
+            const parsed: unknown = JSON.parse(e.data);
 
-          if (packet.type === 'p2p-message') {
-            if (!isP2PMessage(packet.message)) return;
-            for (const h of handlersRef.current) h(peerId, packet.message);
-            return;
-          }
+            let decoded: unknown = parsed;
+            if (isEncryptedWirePacket(parsed)) {
+              const plaintext = await decryptFromPeer(peerId, parsed.payload);
+              if (!plaintext) return;
+              decoded = JSON.parse(plaintext);
+            }
 
-          if (packet.type === 'p2p-chunk-start') {
-            incomingTransfersRef.current.set(`${peerId}:${packet.transferId}`, {
-              totalChunks: packet.totalChunks,
-              chunks: Array<string>(packet.totalChunks).fill(''),
-            });
-            return;
-          }
-
-          if (packet.type === 'p2p-chunk') {
-            const key = `${peerId}:${packet.transferId}`;
-            const transfer = incomingTransfersRef.current.get(key);
-            if (!transfer) return;
-            if (packet.index < 0 || packet.index >= transfer.totalChunks) return;
-            transfer.chunks[packet.index] = packet.chunk;
-            return;
-          }
-
-          if (packet.type === 'p2p-chunk-complete') {
-            const key = `${peerId}:${packet.transferId}`;
-            const transfer = incomingTransfersRef.current.get(key);
-            if (!transfer) return;
-            incomingTransfersRef.current.delete(key);
-            if (transfer.chunks.some((chunk) => chunk.length === 0)) {
-              console.warn('[P2P-DC] incomplete chunked payload', packet.transferId);
+            if (isP2PMessage(decoded)) {
+              for (const h of handlersRef.current) h(peerId, decoded);
               return;
             }
-            const payloadText = transfer.chunks.join('');
-            const payload: unknown = JSON.parse(payloadText);
-            if (!isP2PMessage(payload)) return;
-            for (const h of handlersRef.current) h(peerId, payload);
-            return;
+            if (!isRecord(decoded) || typeof decoded.type !== 'string') return;
+            const packet = decoded as DCPacket;
+
+            if (packet.type === 'p2p-message') {
+              if (!isP2PMessage(packet.message)) return;
+              for (const h of handlersRef.current) h(peerId, packet.message);
+              return;
+            }
+
+            if (packet.type === 'p2p-chunk-start') {
+              incomingTransfersRef.current.set(`${peerId}:${packet.transferId}`, {
+                totalChunks: packet.totalChunks,
+                chunks: Array<string>(packet.totalChunks).fill(''),
+              });
+              return;
+            }
+
+            if (packet.type === 'p2p-chunk') {
+              const key = `${peerId}:${packet.transferId}`;
+              const transfer = incomingTransfersRef.current.get(key);
+              if (!transfer) return;
+              if (packet.index < 0 || packet.index >= transfer.totalChunks) return;
+              transfer.chunks[packet.index] = packet.chunk;
+              return;
+            }
+
+            if (packet.type === 'p2p-chunk-complete') {
+              const key = `${peerId}:${packet.transferId}`;
+              const transfer = incomingTransfersRef.current.get(key);
+              if (!transfer) return;
+              incomingTransfersRef.current.delete(key);
+              if (transfer.chunks.some((chunk) => chunk.length === 0)) {
+                console.warn('[P2P-DC] incomplete chunked payload', packet.transferId);
+                return;
+              }
+              const payloadText = transfer.chunks.join('');
+              const payload: unknown = JSON.parse(payloadText);
+              if (!isP2PMessage(payload)) return;
+              for (const h of handlersRef.current) h(peerId, payload);
+            }
+          } catch {
+            // Ignore malformed packets.
           }
-        } catch { /* ignore malformed */ }
+        })();
       };
     },
     [updateConnected],
@@ -158,7 +198,6 @@ export function useChannelPeers(
     const activePeers = new Set(peerIds);
     const peers = peersRef.current;
 
-    // Remove peers no longer in list
     for (const [id, conn] of peers) {
       if (!activePeers.has(id)) {
         conn.dc?.close();
@@ -167,7 +206,6 @@ export function useChannelPeers(
       }
     }
 
-    // Create connections for new peers
     for (const peerId of peerIds) {
       if (peers.has(peerId)) continue;
 
@@ -199,12 +237,25 @@ export function useChannelPeers(
         pc.ondatachannel = (e) => setupDC(peerId, e.channel);
       }
 
-      // Send dc-ready to initiate
       sendSignal(peerId, { type: 'dc-ready', connectionId: connId });
+      sendIdentityKey(peerId);
     }
 
     updateConnected();
-  }, [currentUserId, peerIds, connectionId, sendSignal, setupDC, updateConnected]);
+  }, [currentUserId, peerIds, connectionId, sendSignal, sendIdentityKey, setupDC, updateConnected]);
+
+  // Re-announce after WS reconnect.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const announce = () => {
+      for (const peerId of peerIds) {
+        sendSignal(peerId, { type: 'dc-ready', connectionId: connectionId(peerId) });
+        sendIdentityKey(peerId);
+      }
+    };
+    if (wsClient.connected) announce();
+    return wsClient.onConnect(announce);
+  }, [currentUserId, peerIds, wsClient, connectionId, sendSignal, sendIdentityKey]);
 
   // Listen for signaling messages
   useEffect(() => {
@@ -214,7 +265,15 @@ export function useChannelPeers(
       if (msg.type !== 'signal') return;
       const { from, payload } = msg;
 
-      // Only handle dc-signals with our connectionId prefix
+      if (payload.type === 'e2ee-key') {
+        if (isRecord(payload.publicKey)) {
+          rememberPeerPublicKey(from, payload.publicKey).catch((err) => {
+            console.error('[E2EE] failed to store peer key', err);
+          });
+        }
+        return;
+      }
+
       if (!('connectionId' in payload) || !payload.connectionId?.startsWith('ch-')) return;
 
       const expectedConnId = connectionId(from);
@@ -240,6 +299,7 @@ export function useChannelPeers(
             .catch((err) => console.error('[P2P-DC] offer error', err));
         } else {
           sendSignal(from, { type: 'dc-ready', connectionId: expectedConnId });
+          sendIdentityKey(from);
         }
         return;
       }
@@ -268,9 +328,8 @@ export function useChannelPeers(
         pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(console.error);
       }
     });
-  }, [currentUserId, wsClient, connectionId, sendSignal]);
+  }, [currentUserId, wsClient, connectionId, sendSignal, sendIdentityKey]);
 
-  // Cleanup all on unmount
   useEffect(() => {
     const peers = peersRef.current;
     const incomingTransfers = incomingTransfersRef.current;
@@ -284,16 +343,16 @@ export function useChannelPeers(
     };
   }, []);
 
-  const sendEncodedToPeer = useCallback((peerId: string, data: string): boolean => {
+  const sendEncodedToPeer = useCallback(async (peerId: string, data: string): Promise<boolean> => {
     const peer = peersRef.current.get(peerId);
-    if (peer?.dc?.readyState === 'open') {
-      peer.dc.send(data);
-      return true;
-    }
-    return false;
+    if (peer?.dc?.readyState !== 'open') return false;
+    const envelope = await encryptForPeer(peerId, data);
+    if (!envelope) return false;
+    peer.dc.send(JSON.stringify({ type: 'e2ee', payload: envelope }));
+    return true;
   }, []);
 
-  const sendMessageToPeer = useCallback((peerId: string, msg: P2PMessage): boolean => {
+  const sendMessageToPeer = useCallback(async (peerId: string, msg: P2PMessage): Promise<boolean> => {
     const encoded = JSON.stringify(msg);
     if (encoded.length <= PAYLOAD_CHUNK_SIZE) {
       return sendEncodedToPeer(peerId, encoded);
@@ -307,7 +366,7 @@ export function useChannelPeers(
       transferId,
       totalChunks: chunks.length,
     };
-    if (!sendEncodedToPeer(peerId, JSON.stringify(startPacket))) return false;
+    if (!await sendEncodedToPeer(peerId, JSON.stringify(startPacket))) return false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkPacket: DCPacket = {
@@ -316,20 +375,20 @@ export function useChannelPeers(
         index: i,
         chunk: chunks[i],
       };
-      if (!sendEncodedToPeer(peerId, JSON.stringify(chunkPacket))) return false;
+      if (!await sendEncodedToPeer(peerId, JSON.stringify(chunkPacket))) return false;
     }
 
     const completePacket: DCPacket = { type: 'p2p-chunk-complete', transferId };
     return sendEncodedToPeer(peerId, JSON.stringify(completePacket));
   }, [sendEncodedToPeer]);
 
-  const sendToPeer = useCallback((peerId: string, msg: P2PMessage) => {
-    sendMessageToPeer(peerId, msg);
+  const sendToPeer = useCallback((peerId: string, msg: P2PMessage): Promise<boolean> => {
+    return sendMessageToPeer(peerId, msg);
   }, [sendMessageToPeer]);
 
-  const broadcastP2P = useCallback((msg: P2PMessage) => {
+  const broadcastP2P = useCallback(async (msg: P2PMessage): Promise<void> => {
     for (const [peerId] of peersRef.current) {
-      sendMessageToPeer(peerId, msg);
+      await sendMessageToPeer(peerId, msg);
     }
   }, [sendMessageToPeer]);
 

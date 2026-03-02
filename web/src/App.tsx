@@ -101,7 +101,7 @@ export const App = () => {
       if (msg.type === 'p2p-channel-sync-request') {
         if (!subscriptions.has(msg.channelId)) return;
         const cached = await getCachedChannelPosts(msg.channelId, msg.sinceTimestamp);
-        p2p.sendToPeer(peerId, {
+        await p2p.sendToPeer(peerId, {
           type: 'p2p-channel-sync-response',
           channelId: msg.channelId,
           posts: cached,
@@ -115,20 +115,30 @@ export const App = () => {
     const connectedPeers = p2p.connectedPeerIds;
     if (connectedPeers.length === 0 || subscriptions.size === 0) return;
 
-    (async () => {
+    const replay = async () => {
       for (const channelId of subscriptions) {
         const pending = await getPendingChannelPosts(channelId);
         for (const item of pending) {
           for (const peerId of connectedPeers) {
             if (item.sentTo.includes(peerId)) continue;
-            p2p.sendToPeer(peerId, { type: 'p2p-channel-post', channelId, post: item.post });
-            await markPendingChannelPostSentTo(item.id, peerId);
+            const sent = await p2p.sendToPeer(peerId, { type: 'p2p-channel-post', channelId, post: item.post });
+            if (sent) {
+              await markPendingChannelPostSentTo(item.id, peerId);
+            }
           }
         }
       }
-    })().catch((err) => {
+    };
+
+    replay().catch((err) => {
       console.error('[P2P] global pending replay failed', err);
     });
+    const timer = window.setInterval(() => {
+      replay().catch((err) => {
+        console.error('[P2P] global pending replay failed', err);
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
   }, [p2p, p2p.connectedPeerIds, subscriptions]);
 
   // When peers connect, request channel sync from cache timestamp.
@@ -145,12 +155,14 @@ export const App = () => {
         const prevTs = lastSyncRequestRef.current.get(requestKey);
         if (prevTs === sinceTimestamp) continue;
 
-        p2p.sendToPeer(targetPeer, {
+        const sent = await p2p.sendToPeer(targetPeer, {
           type: 'p2p-channel-sync-request',
           channelId,
           sinceTimestamp,
         });
-        lastSyncRequestRef.current.set(requestKey, sinceTimestamp ?? -1);
+        if (sent) {
+          lastSyncRequestRef.current.set(requestKey, sinceTimestamp ?? -1);
+        }
       }
     })().catch((err) => {
       console.error('[P2P] global sync request failed', err);

@@ -12,8 +12,8 @@ import {
 } from '../chat/db';
 
 interface P2PFunctions {
-  broadcastP2P: (msg: P2PMessage) => void;
-  sendToPeer: (peerId: string, msg: P2PMessage) => void;
+  broadcastP2P: (msg: P2PMessage) => Promise<void>;
+  sendToPeer: (peerId: string, msg: P2PMessage) => Promise<boolean>;
   onP2PMessage: (handler: (peerId: string, msg: P2PMessage) => void) => () => void;
   connectedPeerIds: string[];
 }
@@ -49,8 +49,10 @@ export function useChannelPosts(
     for (const item of pending) {
       for (const peerId of p2p.connectedPeerIds) {
         if (item.sentTo.includes(peerId)) continue;
-        p2p.sendToPeer(peerId, { type: 'p2p-channel-post', channelId, post: item.post });
-        await markPendingChannelPostSentTo(item.id, peerId);
+        const sent = await p2p.sendToPeer(peerId, { type: 'p2p-channel-post', channelId, post: item.post });
+        if (sent) {
+          await markPendingChannelPostSentTo(item.id, peerId);
+        }
       }
     }
   }, [channelId, p2p]);
@@ -97,6 +99,16 @@ export function useChannelPosts(
             type: 'p2p-channel-sync-request',
             channelId,
             sinceTimestamp: latestCached,
+          }).then((sent) => {
+            if (!sent) {
+              clearTimeout(timeout);
+              unsub();
+              resolve(false);
+            }
+          }).catch(() => {
+            clearTimeout(timeout);
+            unsub();
+            resolve(false);
           });
         });
       }
@@ -149,7 +161,7 @@ export function useChannelPosts(
       if (msg.type === 'p2p-channel-sync-request' && msg.channelId === channelId) {
         // Respond with our cached posts
         const cached = await getCachedPosts(channelId, msg.sinceTimestamp);
-        p2p.sendToPeer(peerId, {
+        await p2p.sendToPeer(peerId, {
           type: 'p2p-channel-sync-response',
           channelId,
           posts: cached,
@@ -164,6 +176,16 @@ export function useChannelPosts(
       console.error('[Channel] pending flush failed', err);
     });
   }, [connectedPeerKey, flushPendingToConnectedPeers]);
+
+  useEffect(() => {
+    if (!channelId || !p2p || p2p.connectedPeerIds.length === 0) return;
+    const timer = window.setInterval(() => {
+      flushPendingToConnectedPeers().catch((err) => {
+        console.error('[Channel] periodic pending flush failed', err);
+      });
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [channelId, p2p, connectedPeerKey, flushPendingToConnectedPeers]);
 
   const sendPost = useCallback((post: ChannelPost) => {
     if (!channelId) return;
