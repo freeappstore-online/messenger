@@ -14,8 +14,8 @@ export function LoginScreen({ loginEmail, loginGoogle }: Pick<AuthAPI, 'loginEma
     setError('');
     try {
       await loginEmail(email, password);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed');
     }
   };
 

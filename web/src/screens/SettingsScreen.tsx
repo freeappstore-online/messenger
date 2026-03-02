@@ -37,8 +37,8 @@ export function SettingsScreen({ user, logout, deleteAccount }: Props) {
       await updateProfile(user, { displayName: name.trim() });
       await updateDoc(doc(db, 'users', user.uid), { displayName: name.trim() });
       setSaved(true);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save profile');
     } finally {
       setSaving(false);
     }
@@ -48,11 +48,12 @@ export function SettingsScreen({ user, logout, deleteAccount }: Props) {
     setError('');
     try {
       await deleteAccount();
-    } catch (e: any) {
-      if (e.code === 'auth/requires-recent-login') {
+    } catch (e: unknown) {
+      const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code?: unknown }).code) : '';
+      if (code === 'auth/requires-recent-login') {
         setError('Please sign out, sign back in, and try again.');
       } else {
-        setError(e.message);
+        setError(e instanceof Error ? e.message : 'Failed to delete account');
       }
       setConfirming(false);
     }

@@ -34,7 +34,7 @@ export function AppShell({ children, wsClient }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-dvh overflow-x-hidden">
+    <div className="flex flex-col h-[var(--app-vh)] overflow-x-hidden">
       <div className="flex-1 overflow-hidden">
         {children}
       </div>

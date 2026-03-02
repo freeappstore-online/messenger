@@ -8,6 +8,17 @@ import type { Channel } from '../hooks/useChannels';
 import type { WsClient } from '../services/wsClient';
 import { ArrowLeft } from 'lucide-react';
 
+const MAX_P2P_IMAGE_BYTES = 1024 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image.'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
+
 interface P2PFunctions {
   broadcastP2P: (msg: P2PMessage) => void;
   sendToPeer: (peerId: string, msg: P2PMessage) => void;
@@ -49,6 +60,40 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
     sendPost(post);
   };
 
+  const handleSendImage = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      window.alert('Only image files are supported.');
+      return;
+    }
+    if (file.size > MAX_P2P_IMAGE_BYTES) {
+      window.alert('Image too large. Please pick an image up to 1MB.');
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const post: ChannelPost = {
+        id: generatePostId(currentUserId),
+        authorId: currentUserId,
+        authorName: currentUserName,
+        body: file.name || 'Photo',
+        createdAt: Date.now(),
+        attachments: [{
+          id: crypto.randomUUID(),
+          kind: 'image',
+          mimeType: file.type || 'image/jpeg',
+          fileName: file.name,
+          size: file.size,
+          dataUrl,
+        }],
+      };
+      sendPost(post);
+    } catch (err) {
+      console.error('[Channel] handleSendImage failed', err);
+      window.alert('Could not send image.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900">
@@ -62,6 +107,7 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
           <MessageBubble
             key={p.id}
             body={p.body}
+            attachments={p.attachments}
             authorName={p.authorName}
             isMine={p.authorId === currentUserId}
             time={p.createdAt}
@@ -70,7 +116,7 @@ export function ChannelScreen({ currentUserId, currentUserName, wsClient, channe
         <div ref={bottomRef} />
       </div>
       {isOwner ? (
-        <Composer onSend={handleSend} />
+        <Composer onSend={handleSend} onSendImage={handleSendImage} />
       ) : (
         <div className="px-4 py-3 text-center text-xs text-gray-500 border-t border-gray-800">
           Only the channel owner can post

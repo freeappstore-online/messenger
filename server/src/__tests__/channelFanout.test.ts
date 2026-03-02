@@ -77,6 +77,21 @@ describe('handleChannelPost', () => {
     expect(mockDocGet).not.toHaveBeenCalled();
   });
 
+  it('rejects attachment payloads over WS path', async () => {
+    const post = makePost({
+      attachments: [{
+        id: 'a1',
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        size: 12,
+        dataUrl: 'data:image/jpeg;base64,abc',
+      }],
+    });
+    await handleChannelPost('u1', 'ch1', post);
+    expect(mockDocGet).not.toHaveBeenCalled();
+    expect(mockDocSet).not.toHaveBeenCalled();
+  });
+
   it('persists post and updates channel metadata on valid post', async () => {
     mockDocGet.mockResolvedValue({ exists: true, data: () => ({ ownerId: 'u1', name: 'Ch' }) });
     mockCollectionGet.mockResolvedValue({ docs: [] });

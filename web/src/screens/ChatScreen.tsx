@@ -89,7 +89,10 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
     console.log('[Chat] handleSend', { dcOpen: peerChannel.isOpen, toUserId, path: peerChannel.isOpen && toUserId ? 'P2P' : 'WS' });
     if (peerChannel.isOpen && toUserId) {
       receiveMessage(msg);
-      peerChannel.send(msg);
+      const sent = peerChannel.send(msg);
+      if (!sent) {
+        sendMessage(msg, toUserId);
+      }
     } else {
       sendMessage(msg, toUserId);
     }
@@ -127,7 +130,10 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
       };
       receiveMessage(msg);
       if (peerChannel.isOpen) {
-        peerChannel.send(msg);
+        const sent = peerChannel.send(msg);
+        if (!sent) {
+          await queuePendingDirectMessage(toUserId, msg);
+        }
       } else {
         await queuePendingDirectMessage(toUserId, msg);
       }

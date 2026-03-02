@@ -44,7 +44,7 @@ export function Composer({ onSend, onTyping, onSendImage }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 px-3 py-2 border-t border-gray-800 bg-gray-900">
+    <form onSubmit={handleSubmit} className="flex gap-2 px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] border-t border-gray-800 bg-gray-900">
       {onSendImage && (
         <>
           <input

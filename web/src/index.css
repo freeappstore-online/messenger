@@ -2,20 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-vh: 100vh;
+}
+
 @layer base {
   html {
     background-color: #000;
     color-scheme: dark;
+    height: 100%;
   }
 
   body {
     margin: 0;
     min-width: 320px;
-    min-height: 100vh;
+    min-height: 100%;
     background-color: #000;
     color: rgba(255, 255, 255, 0.87);
     font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  body,
+  #root {
+    height: 100%;
   }
 }

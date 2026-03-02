@@ -38,6 +38,10 @@ export async function handleChannelPost(
     console.warn(`[channel] rejected: body too large from ${fromUserId}`);
     return;
   }
+  if (post.attachments && post.attachments.length > 0) {
+    console.warn(`[channel] rejected: attachment payload over WS from ${fromUserId}`);
+    return;
+  }
 
   // Enforce authorId
   post.authorId = fromUserId;

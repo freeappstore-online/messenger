@@ -170,8 +170,11 @@ export function useChannelPosts(
     queuePendingChannelPost(channelId, post).catch((err) => {
       console.error('[Channel] queue pending post failed', err);
     });
-    // Send to WS for persistence
-    wsClient.send({ type: 'channel_post', channelId, post });
+    // Keep image payloads off backend storage; distribute these only via P2P.
+    const hasAttachments = !!post.attachments && post.attachments.length > 0;
+    if (!hasAttachments) {
+      wsClient.send({ type: 'channel_post', channelId, post });
+    }
     // Optimistic add + cache
     addPosts([post], channelId);
     flushPendingToConnectedPeers().catch((err) => {

@@ -46,6 +46,23 @@ export const App = () => {
   // Register service worker once
   useEffect(() => { registerServiceWorker(); }, []);
 
+  // iOS Safari/Chrome viewport workaround: sync a stable app height using visualViewport.
+  useEffect(() => {
+    const updateAppVh = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--app-vh', `${Math.round(height)}px`);
+    };
+    updateAppVh();
+    window.visualViewport?.addEventListener('resize', updateAppVh);
+    window.addEventListener('orientationchange', updateAppVh);
+    window.addEventListener('resize', updateAppVh);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateAppVh);
+      window.removeEventListener('orientationchange', updateAppVh);
+      window.removeEventListener('resize', updateAppVh);
+    };
+  }, []);
+
   // Compute P2P peer IDs: online contacts with shared channel subscriptions
   const channelPeerIds = useMemo(() => {
     const peerSet = new Set<string>();

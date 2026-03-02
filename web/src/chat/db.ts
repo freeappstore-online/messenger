@@ -77,6 +77,7 @@ export async function getChannelPosts(
     authorName: record.authorName,
     body: record.body,
     createdAt: record.createdAt,
+    attachments: record.attachments,
   }));
 }
 

@@ -54,6 +54,7 @@ export interface ChannelPost {
   authorName: string;
   body: string;
   createdAt: number;
+  attachments?: MessageAttachment[];
 }
 
 export type SignalPayload =
