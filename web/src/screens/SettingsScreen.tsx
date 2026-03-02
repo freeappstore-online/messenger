@@ -59,7 +59,7 @@ export function SettingsScreen({ user, logout, deleteAccount }: Props) {
   };
 
   return (
-    <div className="p-6">
+    <div className="h-full overflow-auto p-6">
       <h2 className="text-lg font-bold text-gray-100 mb-4">Settings</h2>
       <div className="mb-6">
         <p className="text-sm text-gray-300"><strong>Email:</strong> {user.email}</p>

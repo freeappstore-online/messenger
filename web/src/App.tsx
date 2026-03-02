@@ -103,7 +103,7 @@ export const App = () => {
           onToggleVideo={toggleVideo}
         />
       )}
-      <AppShell>
+      <AppShell wsClient={wsClient}>
         <Routes>
           <Route path="/" element={
             <ConversationList

@@ -14,7 +14,7 @@ export function ConversationList({ conversations, currentUserId, onlineUsers, us
   const navigate = useNavigate();
 
   return (
-    <div>
+    <div className="h-full overflow-auto">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <h2 className="text-lg font-bold text-gray-100">Chats</h2>
         <button
