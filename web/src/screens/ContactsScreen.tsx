@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Contact, ContactRequest } from '@famchat/shared';
+import type { ContactSettings } from '../hooks/useContactSettings';
 import { ContactItem } from '../components/ContactItem';
 import { UserPlus, Check, X } from 'lucide-react';
 
 interface Props {
   currentUserId: string;
   contacts: Contact[];
+  contactSettings: Map<string, ContactSettings>;
   requests: ContactRequest[];
   onlineUsers: Set<string>;
   addContact: (email: string) => Promise<void>;
@@ -17,7 +19,7 @@ interface Props {
   removeContact: (userId: string) => Promise<void>;
 }
 
-export function ContactsScreen({ currentUserId, contacts, requests, onlineUsers, addContact, acceptRequest, declineRequest, removeContact }: Props) {
+export function ContactsScreen({ currentUserId, contacts, contactSettings, requests, onlineUsers, addContact, acceptRequest, declineRequest, removeContact }: Props) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -33,8 +35,8 @@ export function ContactsScreen({ currentUserId, contacts, requests, onlineUsers,
       await addContact(email.trim());
       setEmail('');
       setSuccess('Request sent!');
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to send request');
     } finally {
       setAdding(false);
     }
@@ -111,8 +113,10 @@ export function ContactsScreen({ currentUserId, contacts, requests, onlineUsers,
         <ContactItem
           key={c.userId}
           contact={c}
+          displayName={contactSettings.get(c.userId)?.nickname?.trim() || c.displayName}
           online={onlineUsers.has(c.userId)}
           onClick={() => openChat(c)}
+          onSettings={() => navigate(`/contact/${c.userId}/settings`)}
           onDelete={() => removeContact(c.userId)}
         />
       ))}

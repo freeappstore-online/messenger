@@ -5,8 +5,10 @@ import { usePeerChannel } from '../hooks/usePeerChannel';
 import { useUserNames } from '../hooks/useUserNames';
 import { MessageBubble } from '../components/MessageBubble';
 import { Composer } from '../components/Composer';
+import { queuePendingDirectMessage } from '../chat/db';
 import type { WsClient } from '../services/wsClient';
-import { ArrowLeft, Phone, Video } from 'lucide-react';
+import type { ContactSettings } from '../hooks/useContactSettings';
+import { ArrowLeft, Phone, Settings2, Video } from 'lucide-react';
 
 const MAX_P2P_IMAGE_BYTES = 1024 * 1024;
 
@@ -24,10 +26,11 @@ interface Props {
   currentUserName: string;
   wsClient: WsClient;
   onlineUsers: Set<string>;
+  contactSettings: Map<string, ContactSettings>;
   onStartCall?: (peerId: string, media: 'audio' | 'video') => void;
 }
 
-export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUsers, onStartCall }: Props) {
+export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUsers, contactSettings, onStartCall }: Props) {
   const { convId } = useParams<{ convId: string }>();
   const navigate = useNavigate();
   const { messages, sendMessage, receiveMessage, reactToMessage } = useMessages(convId, wsClient, currentUserId);
@@ -64,7 +67,9 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
 
   const peerIds = useMemo(() => toUserId ? [toUserId] : [], [toUserId]);
   const userNames = useUserNames(peerIds);
-  const peerName = toUserId ? (userNames.get(toUserId) ?? toUserId) : 'Group Chat';
+  const peerName = toUserId
+    ? (contactSettings.get(toUserId)?.nickname?.trim() || userNames.get(toUserId) || toUserId)
+    : 'Group Chat';
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -93,10 +98,6 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
   const handleSendImage = async (file: File) => {
     if (!convId) return;
     if (!toUserId) return;
-    if (!peerChannel.isOpen) {
-      window.alert('Image transfer is P2P-only right now. Wait for direct connection and try again.');
-      return;
-    }
     if (!file.type.startsWith('image/')) {
       window.alert('Only image files are supported.');
       return;
@@ -125,7 +126,11 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
         }],
       };
       receiveMessage(msg);
-      peerChannel.send(msg);
+      if (peerChannel.isOpen) {
+        peerChannel.send(msg);
+      } else {
+        await queuePendingDirectMessage(toUserId, msg);
+      }
     } catch (err) {
       console.error('[Chat] handleSendImage failed', err);
       window.alert('Could not send image.');
@@ -149,6 +154,9 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
         </div>
         {toUserId && onStartCall && (
           <div className="flex gap-1">
+            <button onClick={() => navigate(`/contact/${toUserId}/settings`)} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
+              <Settings2 size={20} />
+            </button>
             <button onClick={() => onStartCall(toUserId, 'audio')} className="p-2 text-emerald-400 transition-colors hover:text-emerald-300">
               <Phone size={20} />
             </button>

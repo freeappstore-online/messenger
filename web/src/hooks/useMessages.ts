@@ -65,7 +65,17 @@ export function useMessages(convId: string | undefined, wsClient: WsClient, curr
         if (cancelled) return;
         const firestoreMsgs = snap.docs.map(d => d.data() as PlainMessage);
         for (const m of firestoreMsgs) seenIds.current.add(m.id);
-        if (firestoreMsgs.length > 0) setMessages(firestoreMsgs);
+        if (firestoreMsgs.length > 0) {
+          setMessages((prev) => {
+            const merged = new Map<string, PlainMessage>();
+            for (const m of prev) merged.set(m.id, m);
+            for (const m of firestoreMsgs) {
+              const existing = merged.get(m.id);
+              merged.set(m.id, existing ? { ...m, attachments: existing.attachments ?? m.attachments, reactions: existing.reactions ?? m.reactions } : m);
+            }
+            return [...merged.values()].sort((a, b) => a.createdAt - b.createdAt);
+          });
+        }
         // Save to Dexie in background (don't block state)
         chatDB.messages.bulkPut(firestoreMsgs).catch(() => {});
       } catch {

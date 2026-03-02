@@ -3,7 +3,7 @@ import { sendTo } from './presence.js';
 import { saveMessage, getConversationMembers, getMessagesSince, getUserConversations, toggleMessageReaction } from './firestore.js';
 import { trackP2PSignal } from './channelFanout.js';
 import { sendPushToUser } from './pushNotify.js';
-import { isContact } from './contacts.js';
+import { isContact, isPushMuted } from './contacts.js';
 
 const MAX_BODY_LENGTH = 10_000;
 const MAX_EMOJI_LENGTH = 16;
@@ -61,11 +61,14 @@ async function handleChat(
 
   // Push notification if not delivered via WS
   if (!delivered) {
-    const preview = msg.message.body.length > 100 ? msg.message.body.slice(0, 100) + '...' : msg.message.body;
-    sendPushToUser(msg.to, 'New message', `${msg.message.authorName}: ${preview}`, {
-      url: `/chat/${msg.convId}`,
-      tag: `chat-${msg.convId}`,
-    }).catch(err => console.error('[push] chat push failed:', err));
+    const muted = await isPushMuted(msg.to, fromUserId);
+    if (!muted) {
+      const preview = msg.message.body.length > 100 ? msg.message.body.slice(0, 100) + '...' : msg.message.body;
+      sendPushToUser(msg.to, 'New message', `${msg.message.authorName}: ${preview}`, {
+        url: `/chat/${msg.convId}`,
+        tag: `chat-${msg.convId}`,
+      }).catch(err => console.error('[push] chat push failed:', err));
+    }
   }
 
   // Ack to sender
@@ -104,10 +107,13 @@ async function handleGroupChat(
         message: msg.message,
       });
       if (!delivered) {
-        sendPushToUser(memberId, 'New message', `${msg.message.authorName}: ${preview}`, {
-          url: `/chat/${msg.convId}`,
-          tag: `chat-${msg.convId}`,
-        }).catch(err => console.error('[push] group push failed:', err));
+        const muted = await isPushMuted(memberId, fromUserId);
+        if (!muted) {
+          sendPushToUser(memberId, 'New message', `${msg.message.authorName}: ${preview}`, {
+            url: `/chat/${msg.convId}`,
+            tag: `chat-${msg.convId}`,
+          }).catch(err => console.error('[push] group push failed:', err));
+        }
       }
     }
   }

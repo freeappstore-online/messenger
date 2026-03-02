@@ -25,6 +25,14 @@ service cloud.firestore {
                               && request.auth.uid == userId
                               && request.resource.data.keys().hasOnly(['token', 'createdAt', 'userAgent']);
       }
+
+      // Per-contact preferences (nickname, notes, push mute)
+      match /contactSettings/{contactId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+                              && request.auth.uid == userId
+                              && request.resource.data.keys().hasOnly(['nickname', 'notes', 'mutePush', 'updatedAt']);
+      }
     }
 
     // Conversations

@@ -24,8 +24,10 @@ vi.mock('../firestore.js', () => ({
 }));
 
 const mockIsContact = vi.fn().mockResolvedValue(false);
+const mockIsPushMuted = vi.fn().mockResolvedValue(false);
 vi.mock('../contacts.js', () => ({
   isContact: (...args: any[]) => mockIsContact(...args),
+  isPushMuted: (...args: any[]) => mockIsPushMuted(...args),
 }));
 
 const mockSendPushToUser = vi.fn().mockResolvedValue(undefined);
@@ -55,6 +57,7 @@ function makeMsg(overrides: Partial<PlainMessage> = {}): PlainMessage {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSendTo.mockReturnValue(true);
+  mockIsPushMuted.mockResolvedValue(false);
 });
 
 describe('routeMessage — chat', () => {
@@ -115,6 +118,14 @@ describe('routeMessage — chat', () => {
     await routeMessage('u1', { type: 'chat', to: 'u2', convId: 'conv1', message: makeMsg() });
     expect(mockSendPushToUser).toHaveBeenCalledWith('u2', 'New message', expect.any(String), expect.any(Object));
   });
+
+  it('does not send push when recipient muted sender', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u1', 'u2']);
+    mockIsPushMuted.mockResolvedValue(true);
+    mockSendTo.mockImplementation((_userId: string, msg: any) => msg.type === 'ack');
+    await routeMessage('u1', { type: 'chat', to: 'u2', convId: 'conv1', message: makeMsg() });
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('routeMessage — chat_group', () => {
@@ -143,6 +154,15 @@ describe('routeMessage — chat_group', () => {
     mockSendTo.mockImplementation((_userId: string, msg: any) => msg.type === 'ack');
     await routeMessage('u1', { type: 'chat_group', convId: 'conv1', message: makeMsg() });
     expect(mockSendPushToUser).toHaveBeenCalledTimes(2); // u2 and u3
+  });
+
+  it('skips push for muted members', async () => {
+    mockGetConversationMembers.mockResolvedValue(['u1', 'u2', 'u3']);
+    mockSendTo.mockImplementation((_userId: string, msg: any) => msg.type === 'ack');
+    mockIsPushMuted.mockImplementation(async (recipientId: string) => recipientId === 'u2');
+    await routeMessage('u1', { type: 'chat_group', convId: 'conv1', message: makeMsg() });
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith('u3', 'New message', expect.any(String), expect.any(Object));
   });
 
   it('fans out to all members except sender', async () => {

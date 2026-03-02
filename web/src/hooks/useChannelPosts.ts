@@ -3,7 +3,13 @@ import { collection, getDocs, query, orderBy, limit, where, type QueryConstraint
 import { db } from '../firebase';
 import { type ChannelPost, type P2PMessage } from '@famchat/shared';
 import type { WsClient } from '../services/wsClient';
-import { getChannelPosts as getCachedPosts, putChannelPosts } from '../chat/db';
+import {
+  getChannelPosts as getCachedPosts,
+  getPendingChannelPosts,
+  markPendingChannelPostSentTo,
+  putChannelPosts,
+  queuePendingChannelPost,
+} from '../chat/db';
 
 interface P2PFunctions {
   broadcastP2P: (msg: P2PMessage) => void;
@@ -20,6 +26,7 @@ export function useChannelPosts(
   const [posts, setPosts] = useState<ChannelPost[]>([]);
   const postsRef = useRef<ChannelPost[]>([]);
   postsRef.current = posts;
+  const connectedPeerKey = p2p?.connectedPeerIds.join('|') ?? '';
 
   const addPosts = useCallback((newPosts: ChannelPost[], cacheChannelId?: string) => {
     setPosts(prev => {
@@ -33,6 +40,20 @@ export function useChannelPosts(
       putChannelPosts(cacheChannelId, newPosts).catch(() => {});
     }
   }, []);
+
+  const flushPendingToConnectedPeers = useCallback(async () => {
+    if (!channelId || !p2p || p2p.connectedPeerIds.length === 0) return;
+    const pending = await getPendingChannelPosts(channelId);
+    if (pending.length === 0) return;
+
+    for (const item of pending) {
+      for (const peerId of p2p.connectedPeerIds) {
+        if (item.sentTo.includes(peerId)) continue;
+        p2p.sendToPeer(peerId, { type: 'p2p-channel-post', channelId, post: item.post });
+        await markPendingChannelPostSentTo(item.id, peerId);
+      }
+    }
+  }, [channelId, p2p]);
 
   // Tier 1: Load from Dexie cache
   // Tier 2: P2P sync request
@@ -137,15 +158,26 @@ export function useChannelPosts(
     });
   }, [channelId, p2p, addPosts]);
 
+  // Replay pending local posts to newly connected peers
+  useEffect(() => {
+    flushPendingToConnectedPeers().catch((err) => {
+      console.error('[Channel] pending flush failed', err);
+    });
+  }, [connectedPeerKey, flushPendingToConnectedPeers]);
+
   const sendPost = useCallback((post: ChannelPost) => {
     if (!channelId) return;
+    queuePendingChannelPost(channelId, post).catch((err) => {
+      console.error('[Channel] queue pending post failed', err);
+    });
     // Send to WS for persistence
     wsClient.send({ type: 'channel_post', channelId, post });
-    // Broadcast to P2P peers
-    p2p?.broadcastP2P({ type: 'p2p-channel-post', channelId, post });
     // Optimistic add + cache
     addPosts([post], channelId);
-  }, [channelId, wsClient, p2p, addPosts]);
+    flushPendingToConnectedPeers().catch((err) => {
+      console.error('[Channel] immediate pending flush failed', err);
+    });
+  }, [channelId, wsClient, addPosts, flushPendingToConnectedPeers]);
 
   return { posts, sendPost };
 }

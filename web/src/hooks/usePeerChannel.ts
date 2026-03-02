@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WsClient } from '../services/wsClient';
 import type { MessageAttachment, PlainMessage, SignalPayload } from '@famchat/shared';
+import { getPendingDirectMessagesForPeer, removePendingDirectMessage } from '../chat/db';
 
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -236,17 +237,20 @@ export function usePeerChannel(
     dc.send(JSON.stringify(packet));
   }, []);
 
-  const send = useCallback((msg: PlainMessage) => {
+  const send = useCallback((msg: PlainMessage): boolean => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== 'open') return false;
+
     const image = msg.attachments?.find((attachment) => attachment.kind === 'image');
     if (!image) {
       sendPacket({ type: 'chat-message', message: msg });
-      return;
+      return true;
     }
 
     const commaIndex = image.dataUrl.indexOf(',');
     if (commaIndex < 0) {
       sendPacket({ type: 'chat-message', message: msg });
-      return;
+      return true;
     }
 
     const dataUrlPrefix = image.dataUrl.slice(0, commaIndex + 1);
@@ -282,7 +286,27 @@ export function usePeerChannel(
       sendPacket({ type: 'chat-image-chunk', transferId, index, chunk });
     });
     sendPacket({ type: 'chat-image-complete', transferId });
+    return true;
   }, [sendPacket]);
+
+  useEffect(() => {
+    if (!peerId || !isOpen) return;
+    let cancelled = false;
+
+    (async () => {
+      const pending = await getPendingDirectMessagesForPeer(peerId);
+      for (const item of pending) {
+        if (cancelled) return;
+        const sent = send(item.message);
+        if (!sent) return;
+        await removePendingDirectMessage(item.id);
+      }
+    })().catch((err) => {
+      console.error('[DC] pending direct flush failed', err);
+    });
+
+    return () => { cancelled = true; };
+  }, [isOpen, peerId, send]);
 
   return { send, isOpen };
 }
