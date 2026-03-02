@@ -1,12 +1,25 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { SendHorizontal } from 'lucide-react';
 
 interface Props {
   onSend: (text: string) => void;
+  onTyping?: () => void;
 }
 
-export function Composer({ onSend }: Props) {
+export function Composer({ onSend, onTyping }: Props) {
   const [text, setText] = useState('');
+  const lastTypingRef = useRef(0);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    if (onTyping) {
+      const now = Date.now();
+      if (now - lastTypingRef.current > 2000) {
+        lastTypingRef.current = now;
+        onTyping();
+      }
+    }
+  }, [onTyping]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +34,7 @@ export function Composer({ onSend }: Props) {
       <input
         type="text"
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={handleChange}
         onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleSubmit(e); }}
         placeholder="Type a message..."
         className="flex-1 px-3 py-2.5 border border-gray-700 rounded-full bg-gray-800 text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"

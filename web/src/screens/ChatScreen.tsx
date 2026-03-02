@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMessages, type PlainMessage } from '../hooks/useMessages';
 import { usePeerChannel } from '../hooks/usePeerChannel';
@@ -26,6 +26,30 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
   const toUserId = parts.length === 2 ? parts.find(p => p !== currentUserId) : undefined;
 
   const peerChannel = usePeerChannel(toUserId, currentUserId, wsClient, receiveMessage);
+
+  // Typing indicator
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return wsClient.onMessage((msg) => {
+      if (msg.type === 'typing' && msg.convId === convId) {
+        setIsTyping(true);
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => setIsTyping(false), 3000);
+      }
+    });
+  }, [wsClient, convId]);
+
+  useEffect(() => {
+    return () => clearTimeout(typingTimerRef.current);
+  }, []);
+
+  const handleTyping = useCallback(() => {
+    if (toUserId && convId) {
+      wsClient.send({ type: 'typing', to: toUserId, convId });
+    }
+  }, [wsClient, toUserId, convId]);
 
   const peerIds = useMemo(() => toUserId ? [toUserId] : [], [toUserId]);
   const userNames = useUserNames(peerIds);
@@ -93,7 +117,10 @@ export function ChatScreen({ currentUserId, currentUserName, wsClient, onlineUse
         ))}
         <div ref={bottomRef} />
       </div>
-      <Composer onSend={handleSend} />
+      {isTyping && (
+        <div className="px-4 py-1 text-xs text-gray-400">{peerName} is typing...</div>
+      )}
+      <Composer onSend={handleSend} onTyping={handleTyping} />
     </div>
   );
 }

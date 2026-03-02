@@ -59,12 +59,12 @@ export function handleConnection(ws: WebSocket, user: DecodedIdToken) {
 
   ws.on('close', () => {
     removeP2PTracking(userId);
-    removeUser(userId);
+    removeUser(userId, ws);
   });
 
   ws.on('error', (err) => {
     console.error(`[WS] Error for ${userId}:`, err);
     removeP2PTracking(userId);
-    removeUser(userId);
+    removeUser(userId, ws);
   });
 }

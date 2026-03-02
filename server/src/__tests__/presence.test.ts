@@ -15,12 +15,15 @@ function makeWs() {
   return { readyState: 1, OPEN: 1, send: vi.fn(), on: vi.fn() } as any;
 }
 
+const dummyWs = makeWs();
 beforeEach(() => {
   vi.clearAllMocks();
-  // Reset module state by removing then re-adding
-  removeUser('u1');
-  removeUser('u2');
-  removeUser('contact1');
+  // Reset module state — pass a dummy ws that won't match, forcing cleanup
+  // We use addUser + removeUser with the same ws to ensure cleanup
+  for (const id of ['u1', 'u2', 'contact1']) {
+    addUser(id, dummyWs);
+    removeUser(id, dummyWs);
+  }
 });
 
 describe('presence', () => {
@@ -30,8 +33,9 @@ describe('presence', () => {
   });
 
   it('removeUser makes isOnline return false', () => {
-    addUser('u1', makeWs());
-    removeUser('u1');
+    const ws = makeWs();
+    addUser('u1', ws);
+    removeUser('u1', ws);
     expect(isOnline('u1')).toBe(false);
   });
 

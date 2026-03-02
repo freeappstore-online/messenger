@@ -18,6 +18,9 @@ export async function routeMessage(fromUserId: string, msg: ClientMessage) {
       return handleSignal(fromUserId, msg);
     case 'sync':
       return handleSync(fromUserId, msg);
+    case 'typing':
+      sendTo(msg.to, { type: 'typing', from: fromUserId, convId: msg.convId });
+      return;
   }
 }
 

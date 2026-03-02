@@ -63,7 +63,8 @@ export type ClientMessage =
   | { type: 'channel_post'; channelId: string; post: ChannelPost }
   | { type: 'signal'; to: string; payload: SignalPayload }
   | { type: 'sync'; since: number }
-  | { type: 'channel_relay'; channelId: string; postId: string; relayedTo: string[] };
+  | { type: 'channel_relay'; channelId: string; postId: string; relayedTo: string[] }
+  | { type: 'typing'; to: string; convId: string };
 
 // Server -> Client
 export type ServerMessage =
@@ -73,4 +74,5 @@ export type ServerMessage =
   | { type: 'sync'; messages: PlainMessage[] }
   | { type: 'channel_post'; channelId: string; post: ChannelPost }
   | { type: 'channel_relay_request'; channelId: string; post: ChannelPost; targets: string[] }
-  | { type: 'ack'; messageId: string };
+  | { type: 'ack'; messageId: string }
+  | { type: 'typing'; from: string; convId: string };

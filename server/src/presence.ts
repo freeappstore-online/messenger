@@ -10,9 +10,12 @@ export function addUser(userId: string, ws: WebSocket) {
   notifyContacts(userId, true);
 }
 
-export function removeUser(userId: string) {
-  online.delete(userId);
-  notifyContacts(userId, false);
+export function removeUser(userId: string, ws: WebSocket) {
+  // Only remove if this is still the active socket (avoids race with reconnects)
+  if (online.get(userId) === ws) {
+    online.delete(userId);
+    notifyContacts(userId, false);
+  }
 }
 
 export function isOnline(userId: string): boolean {
