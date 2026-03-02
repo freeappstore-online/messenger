@@ -1,0 +1,78 @@
+name: Discord Build Notifications
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_STATUS: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.workflow_run.head_commit.author.name }}
+          DEV_URL: "https://xreact-ae672.web.app"
+        run: |
+          if [ "$WORKFLOW_STATUS" = "success" ]; then
+            COLOR="3066993"
+            EMOJI="✅"
+            STATUS_TEXT="Success"
+          elif [ "$WORKFLOW_STATUS" = "failure" ]; then
+            COLOR="15158332"
+            EMOJI="❌"
+            STATUS_TEXT="Failed"
+          else
+            COLOR="15105570"
+            EMOJI="⚠️"
+            STATUS_TEXT="$WORKFLOW_STATUS"
+          fi
+
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
+          CONTENT="$EMOJI $WORKFLOW_NAME - $STATUS_TEXT | $COMMIT_MESSAGE | SHA: $SHORT_SHA | $RUN_URL"
+
+          CONTENT_JSON=$(printf '%s' "$CONTENT" | jq -Rs .)
+          TITLE=$(printf '%s' "$EMOJI $WORKFLOW_NAME - $STATUS_TEXT" | jq -Rs .)
+          DESC=$(printf '%s' "$COMMIT_MESSAGE" | jq -Rs .)
+          AUTHOR=$(printf '%s' "$COMMIT_AUTHOR" | jq -Rs .)
+          URL=$(printf '%s' "$RUN_URL" | jq -Rs .)
+          SHA=$(printf '%s' "$SHORT_SHA" | jq -Rs .)
+          DEV_LINK=$(printf '%s' "[🚀 Open Dev](${DEV_URL})" | jq -Rs .)
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "content": $CONTENT_JSON,
+            "embeds": [{
+              "title": $TITLE,
+              "description": $DESC,
+              "url": $URL,
+              "color": $COLOR,
+              "fields": [
+                {"name": "Launch", "value": $DEV_LINK, "inline": false},
+                {"name": "Author", "value": $AUTHOR, "inline": true},
+                {"name": "SHA", "value": $SHA, "inline": true},
+                {"name": "Status", "value": "$STATUS_TEXT", "inline": true}
+              ],
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+          )
+
+          curl -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               "$DISCORD_WEBHOOK"
