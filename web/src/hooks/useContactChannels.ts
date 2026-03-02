@@ -6,13 +6,12 @@ import type { Contact } from '@famchat/shared';
 export function useContactChannels(
   userId: string | undefined,
   contacts: Contact[],
-  subscriptions: Set<string>,
 ) {
   // channelId -> contactIds subscribed to it
   const [contactsByChannel, setContactsByChannel] = useState<Map<string, string[]>>(new Map());
 
   useEffect(() => {
-    if (!userId || contacts.length === 0 || subscriptions.size === 0) {
+    if (!userId || contacts.length === 0) {
       setContactsByChannel(new Map());
       return;
     }
@@ -41,7 +40,7 @@ export function useContactChannels(
     })();
 
     return () => { cancelled = true; };
-  }, [userId, contacts, subscriptions]);
+  }, [userId, contacts]);
 
   return { contactsByChannel };
 }

@@ -6,6 +6,7 @@ export interface ContactSettings {
   nickname?: string;
   notes?: string;
   mutePush?: boolean;
+  muteInApp?: boolean;
   updatedAt?: number;
 }
 
@@ -30,6 +31,7 @@ export function useContactSettings(userId: string | undefined) {
     if (patch.nickname !== undefined) data.nickname = patch.nickname;
     if (patch.notes !== undefined) data.notes = patch.notes;
     if (patch.mutePush !== undefined) data.mutePush = patch.mutePush;
+    if (patch.muteInApp !== undefined) data.muteInApp = patch.muteInApp;
     await setDoc(doc(db, 'users', userId, 'contactSettings', contactUserId), data, { merge: true });
   }, [userId]);
 

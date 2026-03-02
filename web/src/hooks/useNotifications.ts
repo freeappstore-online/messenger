@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react';
 import { hasNotificationPermission } from '../utils/pwa';
 import { requestFCMToken, saveFCMToken, setupForegroundMessageHandler } from '../services/fcm';
+import type { ContactSettings } from './useContactSettings';
 
-export function useNotifications(userId: string | undefined) {
+function getPeerIdFromChatUrl(url: string | undefined, currentUserId: string): string | undefined {
+  if (!url || !url.startsWith('/chat/')) return undefined;
+  const convId = url.slice('/chat/'.length).split('?')[0];
+  const parts = convId.split(':');
+  if (parts.length !== 2) return undefined;
+  return parts.find((part) => part !== currentUserId);
+}
+
+export function useNotifications(
+  userId: string | undefined,
+  settingsByUser: Map<string, ContactSettings>,
+) {
   const [permissionGranted, setPermissionGranted] = useState(hasNotificationPermission);
 
   useEffect(() => {
@@ -27,6 +39,8 @@ export function useNotifications(userId: string | undefined) {
 
       try {
         unsubMessage = await setupForegroundMessageHandler((payload) => {
+          const peerId = userId ? getPeerIdFromChatUrl(payload.data?.url, userId) : undefined;
+          if (peerId && settingsByUser.get(peerId)?.muteInApp) return;
           const title = payload.notification?.title || 'FamChat';
           const body = payload.notification?.body || 'New message';
           if (document.hidden) return;
@@ -45,7 +59,7 @@ export function useNotifications(userId: string | undefined) {
       cancelled = true;
       unsubMessage?.();
     };
-  }, [userId, permissionGranted]);
+  }, [userId, permissionGranted, settingsByUser]);
 
   return { permissionGranted, setPermissionGranted };
 }

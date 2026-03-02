@@ -40,8 +40,8 @@ export const App = () => {
   const { settingsByUser, saveContactSettings } = useContactSettings(user?.uid);
   const { call, startCall, acceptCall, rejectCall, endCall, toggleMute, toggleVideo } = useCall(user?.uid, wsClient);
   const { channels, subscriptions, createChannel, subscribe, unsubscribe } = useChannels(user?.uid);
-  const { contactsByChannel } = useContactChannels(user?.uid, contacts, subscriptions);
-  useNotifications(user?.uid);
+  const { contactsByChannel } = useContactChannels(user?.uid, contacts);
+  useNotifications(user?.uid, settingsByUser);
 
   // Register service worker once
   useEffect(() => { registerServiceWorker(); }, []);
@@ -241,7 +241,13 @@ export const App = () => {
           } />
           <Route path="/contact/:contactId/settings" element={
             <ContactSettingsScreen
+              currentUserId={currentUserId}
               contacts={contacts}
+              channels={channels}
+              contactsByChannel={contactsByChannel}
+              subscriptions={subscriptions}
+              onSubscribe={subscribe}
+              onUnsubscribe={unsubscribe}
               userNames={preferredUserNames}
               settingsByUser={settingsByUser}
               saveContactSettings={saveContactSettings}
