@@ -27,6 +27,17 @@ jobs:
       - name: Build web
         run: pnpm --filter web build
 
+      - name: Write version.json
+        run: |
+          cat > web/dist/version.json <<EOF
+          {
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref_name }}",
+            "run_id": "${{ github.run_id }}",
+            "built_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -34,3 +45,30 @@ jobs:
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
           channelId: live
           projectId: "${{ secrets.FIREBASE_PROJECT_ID }}"
+
+      - name: Verify live deploy SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_URL="https://xreact-ae672.web.app/version.json"
+          EXPECTED_SHA="${GITHUB_SHA}"
+
+          echo "Verifying live deploy at: $VERSION_URL"
+          echo "Expected SHA: $EXPECTED_SHA"
+
+          ok=false
+          for i in {1..20}; do
+            LIVE_SHA="$(curl -fsS "$VERSION_URL" 2>/dev/null | jq -r .sha 2>/dev/null || true)"
+            if [ "$LIVE_SHA" = "$EXPECTED_SHA" ]; then
+              echo "Live SHA matches: $LIVE_SHA"
+              ok=true
+              break
+            fi
+            echo "Attempt $i: live SHA is '$LIVE_SHA' (not yet '$EXPECTED_SHA'). Retrying..."
+            sleep 6
+          done
+
+          if [ "$ok" != "true" ]; then
+            echo "ERROR: Live SHA never matched expected SHA after 2 minutes."
+            exit 1
+          fi
