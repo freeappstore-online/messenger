@@ -12,6 +12,11 @@
     "test:unit": "pnpm --filter web test:unit",
     "type:check": "pnpm -r run type:check",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy:hosting": "pnpm build && firebase deploy --only hosting"
+    "deploy:hosting": "pnpm build && firebase deploy --only hosting",
+    "test": "pnpm --filter @messenger/web exec tsc -b"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freeappstore-online/messenger.git"
   }
 }
