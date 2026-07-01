@@ -33,3 +33,6 @@ screenshots/
 # pnpm
 pnpm-debug.log*
 server/coverage/
+.vibe-check/
+screencheck-out/
+.playwright-mcp/
