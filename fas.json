@@ -1,0 +1,6 @@
+{
+  "appId": "messenger",
+  "applicationRoot": "web",
+  "outputPath": "web/dist",
+  "buildCommand": "pnpm build"
+}
